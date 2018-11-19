@@ -24,6 +24,8 @@ double object_threshold = 180;
 int max_rectangle_index = 0;
 bool working_table_limits_found = 0;
 static const std::string OPENCV_WINDOW = "Grayscale";
+Rect working_table;
+Mat im_working_table_gray;
 
 static double angle(cv::Point pt1, cv::Point pt2, cv::Point pt0)
 {
@@ -90,7 +92,7 @@ public:
     Mat im_gray, im_bw, im_gray_edges;
     cvtColor(cv_ptr->image, im_gray, COLOR_BGR2GRAY);
     GaussianBlur(im_gray, im_gray, Size(ksize, ksize), sigma, sigma);
-
+    
     /// Getting working table limits
     //threshold(im_gray, im_bw, table_threshold, 255.0, THRESH_BINARY);
     Mat bw;
@@ -100,8 +102,6 @@ public:
     // should be done just once - to find the table
     vector< vector <Point> > contours_table;
     vector<Point> approx;
-    Rect working_table;
-    Mat im_working_table_gray;
     double largest_rectangle_area = 0;
     if (working_table_limits_found == 0)
     {
@@ -162,22 +162,23 @@ public:
           Rect r = boundingRect(contours_table[i]);
           int radius = r.width / 2;
 
-          if (abs(1 - ((double)r.width / r.height)) <= 0.2 &&
-              abs(1 - (area / (CV_PI * pow(radius, 2)))) <= 0.2)
+          if (abs(1 - ((double)r.width / r.height)) <= 0.3 &&
+              abs(1 - (area / (CV_PI * pow(radius, 2)))) <= 0.3)
             setLabel(im_bw, "CIR", contours_table[i]);
-
+            // Show circle coordinates 
         }
       }
-      imshow("src", im_gray);
-      imshow("dst", im_bw);
+      //imshow("src", im_gray);
+      imshow("Canny edge detector", im_bw);
       // If the working table is found make a new image with just the working table
+
       int table_limit_area = (im_gray.cols/2)*(im_gray.rows/3);
       if (largest_rectangle_area > table_limit_area) { 
         working_table = Rect(0,0,im_gray.cols,im_gray.rows) & working_table;
         im_working_table_gray = im_gray(working_table).clone();
-        imshow("Working table", im_working_table_gray);
+        //imshow("Working table", im_working_table_gray);
         working_table_limits_found = 1;
-        cout << "Working table found";
+        cout << "Working table found \n";
       }
     }
     // End shape detection
@@ -187,7 +188,7 @@ public:
     Mat im_gray_objects, im_bw_objects;
     if (working_table_limits_found == 1)
     {
-      im_gray_objects = im_working_table_gray;
+      im_gray_objects = im_gray(working_table).clone();
     } else {
       im_gray_objects = im_gray;
     }
@@ -218,12 +219,14 @@ public:
     /// Find the holes centers
 
     /// End of holes centers
-
+   
     //imshow(OPENCV_WINDOW, cv_ptr->image);
+
     imshow(OPENCV_WINDOW, im_gray_objects);
     imshow("Binary", im_bw_objects);
     ///////// End image processing /////////
     waitKey(3);
+    
 
     // Output modified video stream
     image_pub_.publish(cv_ptr->toImageMsg());
