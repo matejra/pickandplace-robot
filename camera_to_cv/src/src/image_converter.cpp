@@ -91,12 +91,11 @@ public:
 
     Mat im_gray, im_bw, im_gray_edges;
     cvtColor(cv_ptr->image, im_gray, COLOR_BGR2GRAY);
+    Mat bw;
+	  Canny(im_gray, im_bw, 150, 450, 5);
     GaussianBlur(im_gray, im_gray, Size(ksize, ksize), sigma, sigma);
     
     /// Getting working table limits
-    //threshold(im_gray, im_bw, table_threshold, 255.0, THRESH_BINARY);
-    Mat bw;
-	  Canny(im_gray, im_bw, 0, 50, 5);
 
     // shape detection based on https://github.com/bsdnoobz/opencv-code/blob/master/shape-detect.cpp
     // should be done just once - to find the table
@@ -105,19 +104,15 @@ public:
     double largest_rectangle_area = 0;
     if (working_table_limits_found == 0)
     {
-      findContours(im_bw, contours_table, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE); // Find the contours in the image
+      findContours(im_bw, contours_table, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE); // Find the rectangles in the image
       for (int i = 0; i < contours_table.size(); i ++)                         // iterate through each contour.
-      {
+      { 
         approxPolyDP(Mat(contours_table[i]), approx, arcLength(Mat(contours_table[i]), true)*0.02, true);
 
         if (fabs(contourArea(contours_table[i])) < 100 || !isContourConvex(approx))
               continue;
 
-        if (approx.size() == 3)
-        {
-          setLabel(im_bw, "TRI", contours_table[i]);    // Triangles
-        }
-        else if (approx.size() >= 4 && approx.size() <= 6)
+        if (approx.size() >= 4 && approx.size() <= 6)
         {
           // Number of vertices of polygonal curve
           int vtc = approx.size();
@@ -149,29 +144,10 @@ public:
               working_table=boundingRect(contours_table[i]);
             }
           }
-          // For detecting pentagonal, hexagonal - for now commented
-          /*else if (vtc == 5 && mincos >= -0.34 && maxcos <= -0.27)
-            setLabel(im_bw, "PENTA", contours_table[i]);
-          else if (vtc == 6 && mincos >= -0.55 && maxcos <= -0.45)
-            setLabel(im_bw, "HEXA", contours_table[i]);*/
-        }
-        else
-        {
-          // Detect and label circles
-          double area = contourArea(contours_table[i]);
-          Rect r = boundingRect(contours_table[i]);
-          int radius = r.width / 2;
-
-          if (abs(1 - ((double)r.width / r.height)) <= 0.3 &&
-              abs(1 - (area / (CV_PI * pow(radius, 2)))) <= 0.3)
-            setLabel(im_bw, "CIR", contours_table[i]);
-            // Show circle coordinates 
         }
       }
-      //imshow("src", im_gray);
-      imshow("Canny edge detector", im_bw);
-      // If the working table is found make a new image with just the working table
 
+      // If the working table is found make a new image with just the working table
       int table_limit_area = (im_gray.cols/2)*(im_gray.rows/3);
       if (largest_rectangle_area > table_limit_area) { 
         working_table = Rect(0,0,im_gray.cols,im_gray.rows) & working_table;
@@ -211,16 +187,47 @@ public:
       if(contour_area > min_contour_area && contour_area < max_contour_area)
       {
         // draw unfilled rectangle around the contour
-        rectangle(im_gray_objects, r_objects, Scalar(0, 0, 255), 2, 8, 0);
+        //rectangle(im_gray_objects, r_objects, Scalar(0, 0, 255), 2, 8, 0);
       }
     }
     /// End the object centers
 
     /// Find the holes centers
 
+    vector< vector <Point> > contours_circles;
+    vector<Point> approx_circles;
+
+
+    findContours(im_bw, contours_circles, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE); // Find the circles in the image
+    vector<Point2f>center( contours_circles.size() );
+    vector<float>radius( contours_circles.size() );
+
+      for (int i = 0; i < contours_circles.size(); i ++)                         // iterate through each contour.
+      { 
+        approxPolyDP(Mat(contours_circles[i]), approx_circles, arcLength(Mat(contours_circles[i]), true)*0.02, true);
+
+        if (fabs(contourArea(contours_circles[i])) < 100 || !isContourConvex(approx_circles))
+              continue;
+
+        if (approx_circles.size() > 6)
+        {
+          // Detect and label circles
+          double area = contourArea(contours_circles[i]);
+          Rect r = boundingRect(contours_circles[i]);
+          int radius = r.width / 2;
+
+          if (abs(1 - ((double)r.width / r.height)) <= 0.3 &&
+              abs(1 - (area / (CV_PI * pow(radius, 2)))) <= 0.3)
+            setLabel(im_bw, "CIR", contours_circles[i]);
+            
+            // Show circle coordinates 
+        }
+      }
+    imshow("Canny edge detector", im_bw);
+    waitKey(3);
     /// End of holes centers
    
-    //imshow(OPENCV_WINDOW, cv_ptr->image);
+    imshow("Color image", cv_ptr->image);
 
     imshow(OPENCV_WINDOW, im_gray_objects);
     imshow("Binary", im_bw_objects);
