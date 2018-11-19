@@ -198,7 +198,7 @@ public:
     vector<Point> approx_circles;
 
 
-    findContours(im_bw, contours_circles, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE); // Find the circles in the image
+    findContours(im_bw, contours_circles, CV_RETR_LIST, CV_CHAIN_APPROX_SIMPLE); // Find the circles in the image
     vector<Point2f>center( contours_circles.size() );
     vector<float>radius( contours_circles.size() );
 
