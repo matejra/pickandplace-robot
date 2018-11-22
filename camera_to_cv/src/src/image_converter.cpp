@@ -15,15 +15,17 @@ using namespace std;
 // Constants for image processing
 int sigma = 1.2;
 int ksize = 5;
-int erosion_size = 4; 
+int erosion_size = 2; 
 double min_contour_area = 20;
-double max_contour_area = 200;
+double max_contour_area = 400;
+float center_proximity = 7.0;
 double contour_area = 0;
-double table_threshold = 100;
+double holes_threshold = 60;
 double object_threshold = 180;
 int max_rectangle_index = 0;
 bool working_table_limits_found = 0;
-static const std::string OPENCV_WINDOW = "Grayscale";
+int n_expected_objects = 100;
+static const std::string OPENCV_WINDOW = "Color image";
 Rect working_table;
 Mat im_working_table_gray;
 
@@ -88,15 +90,17 @@ public:
       return;
     }
     ///////// Begin image processing /////////
-
-    Mat im_gray, im_bw, im_gray_edges;
-    cvtColor(cv_ptr->image, im_gray, COLOR_BGR2GRAY);
+    Mat image, im_gray, im_bw_canny, im_gray_edges;
+    image = cv_ptr->image;
+    cvtColor(image, im_gray, COLOR_BGR2GRAY);
+    //char* imageName = argv[1];
+    //image = imread( imageName, 1 );
+    //cvtColor(image, im_gray, COLOR_BGR2GRAY);
     Mat bw;
-	  Canny(im_gray, im_bw, 150, 450, 5);
+	  Canny(im_gray, im_bw_canny, 100, 300, 5);
     GaussianBlur(im_gray, im_gray, Size(ksize, ksize), sigma, sigma);
     
-    /// Getting working table limits
-
+    ///////// Getting working table limits
     // shape detection based on https://github.com/bsdnoobz/opencv-code/blob/master/shape-detect.cpp
     // should be done just once - to find the table
     vector< vector <Point> > contours_table;
@@ -104,7 +108,7 @@ public:
     double largest_rectangle_area = 0;
     if (working_table_limits_found == 0)
     {
-      findContours(im_bw, contours_table, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE); // Find the rectangles in the image
+      findContours(im_bw_canny, contours_table, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE); // Find the rectangles in the image
       for (int i = 0; i < contours_table.size(); i ++)                         // iterate through each contour.
       { 
         approxPolyDP(Mat(contours_table[i]), approx, arcLength(Mat(contours_table[i]), true)*0.02, true);
@@ -133,7 +137,7 @@ public:
           // to determine the shape of the contour
           if (vtc == 4 && mincos >= -0.1 && maxcos <= 0.3)
           {
-            setLabel(im_bw, "RECT", contours_table[i]);
+            setLabel(im_bw_canny, "RECT", contours_table[i]);
             // Find the greatest rectangle
             Rect r = boundingRect(contours_table[i]);
             double rectangle_area = r.height*r.width; 
@@ -157,81 +161,167 @@ public:
         cout << "Working table found \n";
       }
     }
-    // End shape detection
-    /// End working table limits
 
     // If the working table is found work with coordinates of working table, otherwise whole image
-    Mat im_gray_objects, im_bw_objects;
+    Mat im_gray_, im_bw_objects;
     if (working_table_limits_found == 1)
     {
-      im_gray_objects = im_gray(working_table).clone();
+      im_gray_ = im_gray(working_table).clone();
+      image = image(working_table).clone();
     } else {
-      im_gray_objects = im_gray;
+      im_gray_ = im_gray;
     }
+    imshow("Color without label", image);
+    ///////// End working table limits
 
-    /// Getting the object centers
-    threshold(im_gray_objects, im_bw_objects, object_threshold, 255.0, THRESH_BINARY);
+    //////// Find the object centers based on 1. thresholding of image (the "whitest" objects) and 2. Circle shape
+    threshold(im_gray_, im_bw_objects, object_threshold, 255.0, THRESH_BINARY);
+    
+    // Apply (uncomment) erosion if the objects are too close together
+    /*Mat element = getStructuringElement( MORPH_ELLIPSE, 
+                       Size( 2*erosion_size + 1, 2*erosion_size+1 ),
+                       Point( erosion_size, erosion_size ));
+    erode( im_bw_objects, im_bw_objects, element );*/
+    
+    vector< vector <Point> > contours_objects;
+    vector<Point> approx_objects;
+    findContours(im_bw_objects, contours_objects, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE); // Find the contours in the image based on threshold
+    vector<Point2f>center_objects;
+    vector<float>radius_vect_objects;
+    center_objects.reserve(n_expected_objects);
+    radius_vect_objects.reserve(n_expected_objects);
+
+    int j = 0;
+    for (int i = 0; i < contours_objects.size(); i ++)                         // iterate through each contour.
+    {
+      approxPolyDP(Mat(contours_objects[i]), approx_objects, arcLength(Mat(contours_objects[i]), true)*0.02, true);
+
+      if (fabs(contourArea(contours_objects[i])) < 100 || !isContourConvex(approx_objects))
+              continue;
+
+        if (approx_objects.size() > 6) // Detects just circles
+        {
+          // Detect and label objects
+          double area_objects = contourArea(contours_objects[i]);
+          Rect r_objects = boundingRect(contours_objects[i]);
+          int radius_objects = r_objects.width / 2;
+
+          if (abs(1 - ((double)r_objects.width / r_objects.height)) <= 0.3 &&
+              abs(1 - (area_objects / (CV_PI * pow(radius_objects, 2)))) <= 0.3 &&
+              area_objects > min_contour_area && area_objects < max_contour_area)
+              {
+                minEnclosingCircle( (Mat)contours_objects[i], center_objects[j], radius_vect_objects[j] );
+                center_objects.push_back(center_objects[j]); // Fill the vector
+                radius_vect_objects.push_back(radius_vect_objects[j]);
+                circle( image, center_objects[j], (int)radius_vect_objects[j], Scalar ( 0,255,0), 2, 8, 0 ); // draw green circle around the contour
+                //cout << "Center Object coordinates" << center_objects[j];            // Show circle coordinates 
+                j++;
+              }
+        }
+    }
+    //////// End of object centers
+//
+    //////// Find the holes centers
+    Mat im_bw_holes_;
+    // adaptiveThreshold(im_gray_, im_bw_holes_, 255, ADAPTIVE_THRESH_GAUSSIAN_C, THRESH_BINARY, 25, 5);
+    threshold(im_gray_, im_bw_holes_, 60.0, 255.0, THRESH_BINARY);
+    // Opening - erosion followed by dilation for noise (glare) removal
     Mat element = getStructuringElement( MORPH_ELLIPSE, 
                        Size( 2*erosion_size + 1, 2*erosion_size+1 ),
                        Point( erosion_size, erosion_size ));
-    erode( im_bw_objects, im_bw_objects, element );
     
-    vector< vector <Point> > contours; // Vector for storing contour
-
-    findContours(im_bw_objects, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE); // Find the contours in the image
-    for (int i = 0; i < contours.size(); i ++)                         // iterate through each contour.
-    {
-      Rect r_objects = boundingRect(contours[i]); 
-      contour_area = r_objects.width * r_objects.height;  //  Find the area of contour
-      // Check the contour area limits and relation between height and width
-      if(contour_area > min_contour_area && contour_area < max_contour_area)
-      {
-        // draw unfilled rectangle around the contour
-        //rectangle(im_gray_objects, r_objects, Scalar(0, 0, 255), 2, 8, 0);
-      }
-    }
-    /// End the object centers
-
-    /// Find the holes centers
-
-    vector< vector <Point> > contours_circles;
-    vector<Point> approx_circles;
+    erode( im_bw_holes_, im_bw_holes_, element );
+    dilate( im_bw_holes_, im_bw_holes_, element );
 
 
-    findContours(im_bw, contours_circles, CV_RETR_LIST, CV_CHAIN_APPROX_SIMPLE); // Find the circles in the image
-    vector<Point2f>center( contours_circles.size() );
-    vector<float>radius( contours_circles.size() );
+    //Canny(im_gray_, im_bw_holes_, 10, 50, 3);
+    vector< vector <Point> > contours_holes;
+    vector<Point> approx_holes;
 
-      for (int i = 0; i < contours_circles.size(); i ++)                         // iterate through each contour.
+
+
+    findContours(im_bw_holes_, contours_holes, CV_RETR_LIST, CV_CHAIN_APPROX_SIMPLE); // Find the circles in the image based on Canny edge d.
+    vector<Point2f>center_holes;
+    vector<float>radius_vect_holes;
+    vector<Point2f>true_object_center (center_objects.size());
+    center_holes.reserve(contours_holes.size());
+    radius_vect_holes.reserve(contours_holes.size());
+    vector <bool> objects_flag (contours_holes.size());
+
+      for (int i = 0; i < contours_holes.size(); i ++)                         // iterate through each contour.
       { 
-        approxPolyDP(Mat(contours_circles[i]), approx_circles, arcLength(Mat(contours_circles[i]), true)*0.02, true);
+        approxPolyDP(Mat(contours_holes[i]), approx_holes, arcLength(Mat(contours_holes[i]), true)*0.02, true);
 
-        if (fabs(contourArea(contours_circles[i])) < 100 || !isContourConvex(approx_circles))
+        if (fabs(contourArea(contours_holes[i])) < 100 || !isContourConvex(approx_holes))
               continue;
 
-        if (approx_circles.size() > 6)
+        if (approx_holes.size() > 6) // Detects just circles
         {
           // Detect and label circles
-          double area = contourArea(contours_circles[i]);
-          Rect r = boundingRect(contours_circles[i]);
+          double area = contourArea(contours_holes[i]);
+          Rect r = boundingRect(contours_holes[i]);
           int radius = r.width / 2;
 
-          if (abs(1 - ((double)r.width / r.height)) <= 0.3 &&
-              abs(1 - (area / (CV_PI * pow(radius, 2)))) <= 0.3)
-            setLabel(im_bw, "CIR", contours_circles[i]);
-            
-            // Show circle coordinates 
+          if (abs(1 - ((double)r.width / r.height)) <= 0.5 &&
+              abs(1 - (area / (CV_PI * pow(radius, 2)))) <= 0.5)
+            {
+              //setLabel(im_bw_holes_, "CIR", contours_holes[i]);
+              minEnclosingCircle( (Mat)contours_holes[i], center_holes[i], radius_vect_holes[i] );
+
+              for (int j = 0; j < center_objects.size(); j++)
+              {
+                if (center_holes[i].x < (center_objects[j].x + center_proximity) && 
+                center_holes[i].x > (center_objects[j].x - center_proximity) && 
+                center_holes[i].y < (center_objects[j].y + center_proximity) && 
+                center_holes[i].y > (center_objects[j].y - center_proximity))
+                {
+                  true_object_center[j] = center_objects[j];
+                  // flag i -> do not draw the circle
+                  objects_flag[i] = 1;
+                }
+              }
+            }
+        }
+        if (objects_flag[i] != 1) {
+            for (int j = 0; j < center_holes.size(); j++)
+            {
+              if (center_holes[i].x < (center_holes[j].x + center_proximity) && 
+              center_holes[i].x > (center_holes[j].x - center_proximity) && 
+              center_holes[i].y < (center_holes[j].y + center_proximity) && 
+              center_holes[i].y > (center_holes[j].y - center_proximity))
+              {
+                center_holes.erase(center_holes.begin() + j);
+              }
+            }
+          // draw red circle if it is a hole -- not working yet
+          if (radius_vect_holes[i] > 0 && radius_vect_holes[i] < 30)
+          {
+            circle( image, center_holes[i], (int)radius_vect_holes[i], Scalar ( 0,0,255), 2, 8, 0 );
+            center_holes.push_back(center_holes[i]); // Fill the vector
+            radius_vect_holes.push_back(radius_vect_holes[i]);
+          }
         }
       }
-    imshow("Canny edge detector", im_bw);
-    waitKey(3);
-    /// End of holes centers
-   
-    imshow("Color image", cv_ptr->image);
 
-    imshow(OPENCV_WINDOW, im_gray_objects);
-    imshow("Binary", im_bw_objects);
-    ///////// End image processing /////////
+      for (int i = 0; i < true_object_center.size(); i++)
+      {
+        cout << "Object [" << i << "] coordinates -> x: " << true_object_center[i].x << ", y: " << true_object_center[i].y << "\n";
+      }
+      for (int i = 0; i < center_holes.size(); i++)
+      {
+        cout << "Hole [" << i << "] coordinates -> x: " << center_holes[i].x << ", y: " << center_holes[i].y << "\n";
+      }
+
+      // cout << center_holes.size();
+//
+      //////// End of the holes centers
+
+      //imshow("Color image", cv_ptr->image);
+      imshow(OPENCV_WINDOW, image);
+
+      //imshow(OPENCV_WINDOW, im_gray_);
+      imshow("Holes thresholding", im_bw_holes_);
+      ///////// End image processing /////////
     waitKey(3);
     
 
