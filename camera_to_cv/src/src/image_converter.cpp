@@ -235,6 +235,7 @@ public:
     
     erode( im_bw_holes_, im_bw_holes_, element );
     dilate( im_bw_holes_, im_bw_holes_, element );
+<<<<<<< HEAD
 
 
     //Canny(im_gray_, im_bw_holes_, 10, 50, 3);
@@ -251,6 +252,24 @@ public:
     radius_vect_holes.reserve(contours_holes.size());
     vector <bool> objects_flag (contours_holes.size());
 
+=======
+
+
+    //Canny(im_gray_, im_bw_holes_, 10, 50, 3);
+    vector< vector <Point> > contours_holes;
+    vector<Point> approx_holes;
+
+
+
+    findContours(im_bw_holes_, contours_holes, CV_RETR_LIST, CV_CHAIN_APPROX_SIMPLE); // Find the circles in the image based on Canny edge d.
+    vector<Point2f>center_holes;
+    vector<float>radius_vect_holes;
+    vector<Point2f>true_object_center (center_objects.size());
+    center_holes.reserve(contours_holes.size());
+    radius_vect_holes.reserve(contours_holes.size());
+    vector <bool> objects_flag (contours_holes.size());
+
+>>>>>>> 137869a2d2c6d56b2b25cbefa4a4e031b7538920
       for (int i = 0; i < contours_holes.size(); i ++)                         // iterate through each contour.
       { 
         approxPolyDP(Mat(contours_holes[i]), approx_holes, arcLength(Mat(contours_holes[i]), true)*0.02, true);
@@ -314,9 +333,13 @@ public:
       {
         cout << "Hole [" << i << "] coordinates -> x: " << center_holes[i].x << ", y: " << center_holes[i].y << "\n";
       }
+<<<<<<< HEAD
       geometry_msgs::Point holes_msg;
       holes_msg.x = true_object_center[0].x;
       holes_msg.y = true_object_center[0].y;
+=======
+
+>>>>>>> 137869a2d2c6d56b2b25cbefa4a4e031b7538920
       // cout << center_holes.size();
 //
       //////// End of the holes centers
