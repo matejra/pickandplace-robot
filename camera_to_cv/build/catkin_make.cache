@@ -1,2 +1,0 @@
-.
--DCATKIN_DEVEL_PREFIX=/home/matej/camera_to_cv/devel -DCMAKE_INSTALL_PREFIX=/home/matej/camera_to_cv/install -G Unix Makefiles

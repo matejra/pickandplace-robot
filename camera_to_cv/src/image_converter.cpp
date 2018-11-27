@@ -10,6 +10,7 @@
 #include <iostream>
 #include <geometry_msgs/Point.h>
 #include <camera_to_cv/points_array.h>
+#include <std_msgs/Bool.h>
 
 using namespace cv;
 using namespace std;
@@ -30,6 +31,7 @@ int n_expected_objects = 100;
 static const std::string OPENCV_WINDOW = "Color image";
 Rect working_table;
 Mat im_working_table_gray;
+
 
 static double angle(cv::Point pt1, cv::Point pt2, cv::Point pt0)
 {
@@ -61,8 +63,8 @@ class ImageConverter
   image_transport::ImageTransport it_;
   image_transport::Subscriber image_sub_;
   image_transport::Publisher image_pub_;
-  ros::Publisher chatter_pub = nh_.advertise<camera_to_cv::points_array>("chatter", 1);
-
+  ros::Publisher chatter_pub = nh_.advertise<camera_to_cv::points_array>("chatter", 1000);
+  ros::Publisher table_found_pub = nh_.advertise<std_msgs::Bool>("table_found", 1000);
 
 public:
   ImageConverter()
@@ -110,6 +112,9 @@ public:
     vector< vector <Point> > contours_table;
     vector<Point> approx;
     double largest_rectangle_area = 0;
+
+    std_msgs::Bool table_found_msg;
+
     if (working_table_limits_found == 0)
     {
       findContours(im_bw_canny, contours_table, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE); // Find the rectangles in the image
@@ -165,6 +170,8 @@ public:
         cout << "Working table found \n";
       }
     }
+    
+    table_found_msg.data = working_table_limits_found;
 
     // If the working table is found work with coordinates of working table, otherwise whole image
     Mat im_gray_, im_bw_objects;
@@ -215,11 +222,15 @@ public:
               area_objects > min_contour_area && area_objects < max_contour_area)
               {
                 minEnclosingCircle( (Mat)contours_objects[i], center_objects[j], radius_vect_objects[j] );
-                center_objects.push_back(center_objects[j]); // Fill the vector
-                radius_vect_objects.push_back(radius_vect_objects[j]);
-                circle( image, center_objects[j], (int)radius_vect_objects[j], Scalar ( 0,255,0), 2, 8, 0 ); // draw green circle around the contour
-                //cout << "Center Object coordinates" << center_objects[j];            // Show circle coordinates 
-                j++;
+                if (center_objects[j].x > 1.0 && center_objects[j].y > 1.0 
+                && center_objects[j].x < 640.0 && center_objects[j].y < 480.0 )
+                {
+                  center_objects.push_back(center_objects[j]); // Fill the vector
+                  radius_vect_objects.push_back(radius_vect_objects[j]);
+                  circle( image, center_objects[j], (int)radius_vect_objects[j], Scalar ( 0,255,0), 2, 8, 0 ); // draw green circle around the contour
+                  cout << "Center Object coordinates" << center_objects[j];            // Show circle coordinates 
+                  j++;
+                }
               }
         }
     }
@@ -297,7 +308,7 @@ public:
                 center_holes.erase(center_holes.begin() + j);
               }
             }
-          // draw red circle if it is a hole -- not working yet
+          // draw red circle if it is a hole
           if (radius_vect_holes[i] > 0 && radius_vect_holes[i] < 30)
           {
             circle( image, center_holes[i], (int)radius_vect_holes[i], Scalar ( 0,0,255), 2, 8, 0 );
@@ -338,6 +349,7 @@ public:
     chatter_pub.publish(points_msg);
     // Output modified video stream
     image_pub_.publish(cv_ptr->toImageMsg());
+    table_found_pub.publish(table_found_msg);
   }
 };
 

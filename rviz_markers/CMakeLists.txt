@@ -11,6 +11,7 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   visualization_msgs
   tf2_ros
+  camera_to_cv
 )
 
 ## System dependencies are found with CMake's conventions
@@ -136,6 +137,10 @@ include_directories(
 # add_executable(${PROJECT_NAME}_node src/rviz_markers_node.cpp)
 add_executable(frame_tf2_broadcaster src/frame_tf2_broadcaster.cpp)
 add_executable(basic_shapes src/basic_shapes.cpp)
+
+add_dependencies(frame_tf2_broadcaster ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(basic_shapes ${catkin_EXPORTED_TARGETS})
+
 
 target_link_libraries(frame_tf2_broadcaster
  ${catkin_LIBRARIES}
