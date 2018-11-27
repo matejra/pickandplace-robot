@@ -6,11 +6,23 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   sensor_msgs
   std_msgs
+  geometry_msgs
+  message_generation
+)
+add_message_files(
+  FILES
+  points_array.msg
+)
+## Generate added messages and services with any dependencies listed here
+generate_messages(
+  DEPENDENCIES
+  geometry_msgs
 )
 find_package(OpenCV REQUIRED)
 catkin_package(
-CATKIN_DEPENDS cv_bridge image_transport roscpp sensor_msgs std_msgs
+CATKIN_DEPENDS cv_bridge image_transport roscpp sensor_msgs std_msgs geometry_msgs message_runtime
 )
+
 include_directories(
   ${catkin_INCLUDE_DIRS}
 )

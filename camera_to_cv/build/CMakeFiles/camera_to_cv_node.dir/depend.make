@@ -4,6 +4,7 @@
 CMakeFiles/camera_to_cv_node.dir/src/image_converter.cpp.o: /home/matej/camera_to_cv/src/src/image_converter.cpp
 CMakeFiles/camera_to_cv_node.dir/src/image_converter.cpp.o: /opt/ros/kinetic/include/camera_info_manager/camera_info_manager.h
 CMakeFiles/camera_to_cv_node.dir/src/image_converter.cpp.o: /opt/ros/kinetic/include/cv_bridge/cv_bridge.h
+CMakeFiles/camera_to_cv_node.dir/src/image_converter.cpp.o: /opt/ros/kinetic/include/geometry_msgs/Point.h
 CMakeFiles/camera_to_cv_node.dir/src/image_converter.cpp.o: /opt/ros/kinetic/include/image_transport/camera_publisher.h
 CMakeFiles/camera_to_cv_node.dir/src/image_converter.cpp.o: /opt/ros/kinetic/include/image_transport/camera_subscriber.h
 CMakeFiles/camera_to_cv_node.dir/src/image_converter.cpp.o: /opt/ros/kinetic/include/image_transport/exception.h

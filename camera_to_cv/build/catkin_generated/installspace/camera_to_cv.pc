@@ -3,6 +3,6 @@ prefix=/home/matej/camera_to_cv/install
 Name: camera_to_cv
 Description: Description of camera_to_cv
 Version: 0.0.0
-Cflags: 
+Cflags: -I/home/matej/camera_to_cv/install/include
 Libs: -L/home/matej/camera_to_cv/install/lib 
-Requires: cv_bridge image_transport roscpp sensor_msgs std_msgs
+Requires: cv_bridge image_transport roscpp sensor_msgs std_msgs geometry_msgs message_runtime

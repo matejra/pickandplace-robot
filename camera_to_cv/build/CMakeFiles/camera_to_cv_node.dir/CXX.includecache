@@ -27,6 +27,10 @@ cmath
 -
 iostream
 -
+geometry_msgs/Point.h
+-
+camera_to_cv/points_array.h
+-
 
 /opt/ros/kinetic/include/camera_info_manager/camera_info_manager.h
 ros/ros.h
@@ -54,6 +58,22 @@ opencv2/imgproc/imgproc.hpp
 opencv2/imgproc/types_c.h
 -
 stdexcept
+-
+
+/opt/ros/kinetic/include/geometry_msgs/Point.h
+string
+-
+vector
+-
+map
+-
+ros/types.h
+-
+ros/serialization.h
+-
+ros/builtin_message_traits.h
+-
+ros/message_operations.h
 -
 
 /opt/ros/kinetic/include/image_transport/camera_publisher.h

@@ -91,9 +91,9 @@ endif()
 # flag project as catkin-based to distinguish if a find_package()-ed project is a catkin project
 set(camera_to_cv_FOUND_CATKIN_PROJECT TRUE)
 
-if(NOT " " STREQUAL " ")
+if(NOT "/home/matej/camera_to_cv/devel/include " STREQUAL " ")
   set(camera_to_cv_INCLUDE_DIRS "")
-  set(_include_dirs "")
+  set(_include_dirs "/home/matej/camera_to_cv/devel/include")
   if(NOT " " STREQUAL " ")
     set(_report "Check the issue tracker '' and consider creating a ticket if the problem has not been reported yet.")
   elseif(NOT " " STREQUAL " ")
@@ -129,7 +129,7 @@ foreach(library ${libraries})
     set(lib_path "")
     set(lib "${library}-NOTFOUND")
     # since the path where the library is found is returned we have to iterate over the paths manually
-    foreach(path /home/matej/camera_to_cv/devel/lib;/home/matej/camera_to_cv/devel/lib;/opt/ros/kinetic/lib)
+    foreach(path /home/matej/camera_to_cv/devel/lib;/home/matej/catkin_ws/devel/lib;/opt/ros/kinetic/lib)
       find_library(lib ${library}
         PATHS ${path}
         NO_DEFAULT_PATH NO_CMAKE_FIND_ROOT_PATH)
@@ -152,7 +152,7 @@ foreach(library ${libraries})
   endif()
 endforeach()
 
-set(camera_to_cv_EXPORTED_TARGETS "")
+set(camera_to_cv_EXPORTED_TARGETS "camera_to_cv_generate_messages_cpp;camera_to_cv_generate_messages_eus;camera_to_cv_generate_messages_lisp;camera_to_cv_generate_messages_nodejs;camera_to_cv_generate_messages_py")
 # create dummy targets for exported code generation targets to make life of users easier
 foreach(t ${camera_to_cv_EXPORTED_TARGETS})
   if(NOT TARGET ${t})
@@ -160,7 +160,7 @@ foreach(t ${camera_to_cv_EXPORTED_TARGETS})
   endif()
 endforeach()
 
-set(depends "cv_bridge;image_transport;roscpp;sensor_msgs;std_msgs")
+set(depends "cv_bridge;image_transport;roscpp;sensor_msgs;std_msgs;geometry_msgs;message_runtime")
 foreach(depend ${depends})
   string(REPLACE " " ";" depend_list ${depend})
   # the package name of the dependency must be kept in a unique variable so that it is not overwritten in recursive calls
@@ -189,7 +189,7 @@ foreach(depend ${depends})
   list(APPEND camera_to_cv_EXPORTED_TARGETS ${${camera_to_cv_dep}_EXPORTED_TARGETS})
 endforeach()
 
-set(pkg_cfg_extras "")
+set(pkg_cfg_extras "camera_to_cv-msg-extras.cmake")
 foreach(extra ${pkg_cfg_extras})
   if(NOT IS_ABSOLUTE ${extra})
     set(extra ${camera_to_cv_DIR}/${extra})
