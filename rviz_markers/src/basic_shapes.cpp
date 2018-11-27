@@ -6,7 +6,8 @@
 #include <camera_to_cv/points_array.h>
 #include <ros/console.h>
 #include <std_msgs/Bool.h>
-    
+#include <tf2/LinearMath/Quaternion.h>
+
 float camera_x;
 float camera_y;
 float table_x;
@@ -45,7 +46,8 @@ int main( int argc, char** argv )
   ros::init(argc, argv, "basic_shapes");
   ros::NodeHandle n;
   ros::Rate r(1);
-  ros::Publisher marker_pub = n.advertise<visualization_msgs::MarkerArray>("visualization_marker", 1);
+  ros::Publisher marker_pub = n.advertise<visualization_msgs::MarkerArray>("visualization_marker_array", 1);
+  //ros::Publisher table_pub = n.advertise<visualization_msgs::Marker>("visualization_marker_table", 1);
   ros::Subscriber sub = n.subscribe("chatter", 1000, holes_centers_clbk);
   ros::Subscriber sub_table = n.subscribe ("table_found", 1000, table_found_clbk);
   // Set our initial shape type to be a cube
@@ -134,8 +136,32 @@ int main( int argc, char** argv )
       marker.lifetime = ros::Duration();
       marker_array.markers.push_back(marker);
     }
-
-
+    visualization_msgs::Marker table_marker;
+    table_marker.header.frame_id = "/base_link";
+    table_marker.header.stamp = ros::Time::now();
+    table_marker.ns = "working_table";
+    table_marker.id = 0;
+    table_marker.type = visualization_msgs::Marker::MESH_RESOURCE;
+    table_marker.mesh_resource = "package://fanuc_lrmate200id_support/meshes/lrmate200id/visual/working_table.stl";
+    table_marker.action = visualization_msgs::Marker::ADD;
+    tf2::Quaternion q;
+        q.setRPY(0, 3.14159, 1.5708);
+    table_marker.pose.position.x = table_x;
+    table_marker.pose.position.y = table_y;
+    table_marker.pose.position.z = 0;
+    table_marker.pose.orientation.x = q.x();
+    table_marker.pose.orientation.y = q.y();
+    table_marker.pose.orientation.z = q.z();
+    table_marker.pose.orientation.w = q.w();
+    table_marker.scale.x = 0.001;
+    table_marker.scale.y = 0.001;
+    table_marker.scale.z = 0.001;
+    table_marker.color.r = 0.0f;
+    table_marker.color.g = 0.0f;
+    table_marker.color.b = 0.0f;
+    table_marker.color.a = 1.0;
+    table_marker.lifetime = ros::Duration();
+    marker_array.markers.push_back(table_marker);
     // Publish the marker
     while (marker_pub.getNumSubscribers() < 1)
     {
@@ -147,6 +173,7 @@ int main( int argc, char** argv )
       sleep(1);
     }
     marker_pub.publish(marker_array);
+    //table_pub.publish(table_marker);
     ros::spinOnce();
     //r.sleep();
 
