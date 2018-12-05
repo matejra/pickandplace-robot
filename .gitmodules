@@ -1,0 +1,3 @@
+[submodule "usb_cam"]
+	path = usb_cam
+	url = git://github.com/matejra/pickandplace-robot.git
