@@ -41,3 +41,5 @@ rosrun camera_to_cv camera_to_cv_node
 * Dobljen model gripperja, popravljen model "klešč", oba vključena v Moveit!
 * Robot premaknjen v kartezičnem koordinatnem sistemu.
 
+##### Razno:
+* Izdelan nosilec za kamero
