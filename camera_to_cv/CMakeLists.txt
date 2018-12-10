@@ -12,6 +12,7 @@ find_package(catkin REQUIRED COMPONENTS
 add_message_files(
   FILES
   points_array.msg
+  table_properties.msg
 )
 ## Generate added messages and services with any dependencies listed here
 generate_messages(

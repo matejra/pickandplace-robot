@@ -13,7 +13,7 @@ int main(int argc, char** argv){
   transformStamped.header.frame_id = "base_link";
   transformStamped.child_frame_id = "camera_frame";
   transformStamped.transform.translation.x = 0.39;
-  transformStamped.transform.translation.y = 0.12;
+  transformStamped.transform.translation.y = 0.10;
   transformStamped.transform.translation.z = 0.92;
   tf2::Quaternion q;
         q.setRPY(0, 0, 3.14159);

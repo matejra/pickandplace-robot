@@ -10,7 +10,9 @@
 #include <iostream>
 #include <geometry_msgs/Point.h>
 #include <camera_to_cv/points_array.h>
+#include <camera_to_cv/table_properties.h>
 #include <std_msgs/Bool.h>
+#include <std_msgs/Int32.h>
 
 using namespace cv;
 using namespace std;
@@ -59,11 +61,14 @@ void setLabel(Mat& im, const string label, vector<Point>& contour)
 
 class ImageConverter
 {
+  // Image transport class and node handle declaration
   ros::NodeHandle nh_;
   image_transport::ImageTransport it_;
+  // Publishers and subscribers declaration
   image_transport::Subscriber image_sub_;
   image_transport::Publisher image_pub_;
   ros::Publisher chatter_pub = nh_.advertise<camera_to_cv::points_array>("chatter", 1000);
+  ros::Publisher table_properties_pub = nh_.advertise<camera_to_cv::table_properties>("table_properties_chatter", 1000);
   ros::Publisher table_found_pub = nh_.advertise<std_msgs::Bool>("table_found", 1000);
 
 public:
@@ -114,6 +119,7 @@ public:
     double largest_rectangle_area = 0;
 
     std_msgs::Bool table_found_msg;
+    camera_to_cv::table_properties table_properties_msg;
 
     if (working_table_limits_found == 0)
     {
@@ -161,6 +167,7 @@ public:
       }
 
       // If the working table is found make a new image with just the working table
+      
       int table_limit_area = (im_gray.cols/2)*(im_gray.rows/3);
       if (largest_rectangle_area > table_limit_area) { 
         working_table = Rect(0,0,im_gray.cols,im_gray.rows) & working_table;
@@ -170,7 +177,16 @@ public:
         cout << "Working table found \n";
       }
     }
-    
+
+    if (working_table_limits_found == 1)
+    {
+      table_properties_msg.width = im_working_table_gray.cols;
+      table_properties_msg.height = im_working_table_gray.rows;
+    } else {
+      table_properties_msg.width = 0;
+      table_properties_msg.height = 0;
+    }
+
     table_found_msg.data = working_table_limits_found;
 
     // If the working table is found work with coordinates of working table, otherwise whole image
@@ -228,7 +244,7 @@ public:
                   center_objects.push_back(center_objects[j]); // Fill the vector
                   radius_vect_objects.push_back(radius_vect_objects[j]);
                   circle( image, center_objects[j], (int)radius_vect_objects[j], Scalar ( 0,255,0), 2, 8, 0 ); // draw green circle around the contour
-                  cout << "Center Object coordinates" << center_objects[j];            // Show circle coordinates 
+                  //cout << "Center Object coordinates" << center_objects[j];            // Show circle coordinates 
                   j++;
                 }
               }
@@ -258,9 +274,10 @@ public:
     findContours(im_bw_holes_, contours_holes, CV_RETR_LIST, CV_CHAIN_APPROX_SIMPLE); // Find the circles in the image based on Canny edge d.
     vector<Point2f>center_holes;
     vector<float>radius_vect_holes;
-    vector<Point2f>true_object_center (center_objects.size());
+    vector<Point2f>true_object_center;
     center_holes.reserve(contours_holes.size());
     radius_vect_holes.reserve(contours_holes.size());
+    true_object_center.reserve(n_expected_objects);
     vector <bool> objects_flag (contours_holes.size());
 
       for (int i = 0; i < contours_holes.size(); i ++)                         // iterate through each contour.
@@ -290,7 +307,7 @@ public:
                 center_holes[i].y < (center_objects[j].y + center_proximity) && 
                 center_holes[i].y > (center_objects[j].y - center_proximity))
                 {
-                  true_object_center[j] = center_objects[j];
+                  true_object_center.push_back(center_objects[j]);
                   // flag i -> do not draw the circle
                   objects_flag[i] = 1;
                 }
@@ -350,6 +367,7 @@ public:
     // Output modified video stream
     image_pub_.publish(cv_ptr->toImageMsg());
     table_found_pub.publish(table_found_msg);
+    table_properties_pub.publish(table_properties_msg);
   }
 };
 
