@@ -1,6 +1,7 @@
 ### Za nardit:
 ##### OpenCV:
 * Ureditev kode - trenutno vse v classu ImageConverter, naredi funkcije, class da bo bolj pregleden.
+* Zamenjava Publisher/Subscriber s Client/Server -> camera node steče samo takrat ko ga pokličemo - ne išče stalno lukenj in objektov.
 
 ##### ROS Koordinatni sistemi:
 ##### RViz:
@@ -10,9 +11,19 @@
 * Zaklenitev zadnjih dneh joint-ov robota (5 in 6), da bo gripper vedno pravokoten na mizo, klešče pa vzporedne z daljšim robom mize.
 * Mehko približevanje in oddaljevanje od objektov - upočasnitev, z MoveIt Pick and place.
 * Nastavitev pogojev, da pri pobiranju gripper stisne, pri odlaganju spusti.
+* Programiranje rutine pobiranja in odlaganja - npr. pobere vse objekte in jih odloži na min x in min y koordinate luknje, ki je še prosta.
 
 ##### ROS na TP:
 * Naložitev interfaca, da lahko upravljam z Fanucovimi I/O - za premikanje gripperja.
+
+### Delo za naprej / ko bo narejeno vse za pobiranje z eno kamero in enakimi barvami valjev:
+##### Različne barve valjev:
+* zaznavanje barve valjev in odlaganje v škatlo npr. rdeči, zeleni, modri, beli
+* vizualizacija različnih barv v RViz
+##### Stereo kamera:
+* npr. dodajanje Kinect senzorja, ki nam omogoči pobiranje in odlaganje različnih predmetov
+* zaznavanje različnih objektov s Kinectom - za objekt različna rutina kako ga gripper prime
+* vizualizacija različnih objektov v RViz
 
 ### Narejeno:
 ##### Povezava, driverji:
@@ -40,4 +51,3 @@ rosrun camera_to_cv camera_to_cv_node
 ##### ROS Moveit!:
 * Dobljen model gripperja, popravljen model "klešč", oba vključena v Moveit!
 * Robot premaknjen v kartezičnem koordinatnem sistemu.
-
