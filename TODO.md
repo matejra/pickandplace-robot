@@ -2,6 +2,7 @@
 ##### OpenCV:
 * Ureditev kode - trenutno vse v classu ImageConverter, naredi funkcije, class da bo bolj pregleden.
 * Zamenjava Publisher/Subscriber s Client/Server -> camera node steče samo takrat ko ga pokličemo - ne išče stalno lukenj in objektov.
+* Naredi bolj odporno na osvetlitev (povprečje lukenj - > nad povprečjem + ... bela, pod povprečjem - ... črna.)
 
 ##### ROS Koordinatni sistemi:
 ##### RViz:

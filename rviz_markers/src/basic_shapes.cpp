@@ -99,7 +99,14 @@ int main( int argc, char** argv )
     table_x = transformStamped_table.transform.translation.x;
     table_y = transformStamped_table.transform.translation.y;
 
-    if (points_vec_x.size() != 0) 
+    /*if (table_found_var == true) {
+      marker.action = visualization_msgs::Marker::DELETEALL;
+      marker_array.markers.push_back(marker);
+    }*/
+
+    
+
+    if (points_vec_x.size() != 0 && table_found_var == true) 
     {
       for (int i = 0; i < num_objects; i++)
       {
@@ -113,21 +120,22 @@ int main( int argc, char** argv )
         marker.type = shape;
 
         // Set the marker action.  Options are ADD, DELETE, and new in ROS Indigo: 3 (DELETEALL)
+
         marker.action = visualization_msgs::Marker::ADD;
         // če je miza najdena je referenca spodnji desni rob mize
         // če ni najdena je referenca center kamere
 
-          if (table_found_var == true) {
+          /*if (table_found_var == true) {*/
             // Set the pose of the marker.  This is a full 6DOF pose relative to the frame/time specified in the header
             marker.pose.position.x = table_x - ((working_table_h - points_vec_y[i])/pixel_to_m); //
             marker.pose.position.y = table_y - ((working_table_w - points_vec_x[i])/pixel_to_m); //
-          } else {
+          /*} else {
             marker.pose.position.x = camera_x - ((camera_h/2 - points_vec_y[i])/pixel_to_m);
             marker.pose.position.y = camera_y - ((camera_w/2 - points_vec_x[i])/pixel_to_m);
-          }
+          }*/
         
 
-        marker.pose.position.z = 0;
+        marker.pose.position.z = 0.02;
         marker.pose.orientation.x = 0.0;
         marker.pose.orientation.y = 0.0;
         marker.pose.orientation.z = 0.0;

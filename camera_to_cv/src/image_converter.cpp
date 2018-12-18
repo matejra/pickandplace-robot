@@ -25,8 +25,8 @@ double min_contour_area = 20;
 double max_contour_area = 400;
 float center_proximity = 7.0;
 double contour_area = 0;
-double holes_threshold = 60;
-double object_threshold = 180;
+double holes_threshold = 100;
+double object_threshold = 182;
 int max_rectangle_index = 0;
 bool working_table_limits_found = 0;
 int n_expected_objects = 100;
@@ -255,7 +255,7 @@ public:
     //////// Find the holes centers
     Mat im_bw_holes_;
     // adaptiveThreshold(im_gray_, im_bw_holes_, 255, ADAPTIVE_THRESH_GAUSSIAN_C, THRESH_BINARY, 25, 5);
-    threshold(im_gray_, im_bw_holes_, 60.0, 255.0, THRESH_BINARY);
+    threshold(im_gray_, im_bw_holes_, holes_threshold, 255.0, THRESH_BINARY);
     // Opening - erosion followed by dilation for noise (glare) removal
     Mat element = getStructuringElement( MORPH_ELLIPSE, 
                        Size( 2*erosion_size + 1, 2*erosion_size+1 ),
@@ -363,9 +363,12 @@ public:
       ///////// End image processing /////////
     waitKey(3);
     
-    chatter_pub.publish(points_msg);
     // Output modified video stream
     image_pub_.publish(cv_ptr->toImageMsg());
+    if (working_table_limits_found == 1) {
+      chatter_pub.publish(points_msg);
+    }
+    working_table_limits_found = 0;
     table_found_pub.publish(table_found_msg);
     table_properties_pub.publish(table_properties_msg);
   }
