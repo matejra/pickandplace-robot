@@ -6,10 +6,9 @@
 
 ##### ROS Koordinatni sistemi:
 ##### RViz:
-* Ureditev spawnanja in brisanja objektov - npr. kamera naredi sliko ko robot ne zakriva mize - spawna objekte. Ko objekt pobere in premakne na drugo lokacijo se robot zopet umakne, kamera slika in popravi lokacijo objektov (na prvi lokaciji zbriše, na drugi doda).
 
 ##### ROS Moveit!:
-* Zaklenitev zadnjih dneh joint-ov robota (5 in 6), da bo gripper vedno pravokoten na mizo, klešče pa vzporedne z daljšim robom mize.
+
 * Mehko približevanje in oddaljevanje od objektov - upočasnitev, z MoveIt Pick and place.
 * Nastavitev pogojev, da pri pobiranju gripper stisne, pri odlaganju spusti.
 * Programiranje rutine pobiranja in odlaganja - npr. pobere vse objekte in jih odloži na min x in min y koordinate luknje, ki je še prosta.
@@ -48,7 +47,12 @@ rosrun camera_to_cv camera_to_cv_node
 
 ##### RViz:
 * Iz koordinat detektiranih objektov in mize je narisana miza in objekti v Rviz - message za koordinate valjev je preko rostopic-a poslan v node basic_shapes, v tem node-u se izrišejo valji in pa miza, ki ima fiksne koordinate.
+* Ureditev spawnanja in brisanja objektov - kamera naredi sliko ko robot ne zakriva mize - spawna objekte. Lokacije objektov so zopet popravljene ko kamera spet vidi mizo.
 
 ##### ROS Moveit!:
 * Dobljen model gripperja, popravljen model "klešč", oba vključena v Moveit!
 * Robot premaknjen v kartezičnem koordinatnem sistemu.
+* Zaklenitev zadnjih dneh joint-ov robota (5 in 6), da je gripper vedno pravokoten na mizo, klešče pa vzporedne z daljšim robom mize.
+
+##### URDF:
+* Narejen URDF file za Fanuc LR Mate 200 iD 4s
