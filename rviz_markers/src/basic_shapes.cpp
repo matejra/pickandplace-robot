@@ -20,13 +20,14 @@ float working_table_h = 250;
 float camera_w = 640;
 float camera_h = 480;
 float pixel_to_m = 839; // initialize pixel to m ratio, if table is not found. 839 px = 1m
+int num_old_objects = 0;
 
 std::vector<double >points_vec_x;
 std::vector<double >points_vec_y;
 bool table_found_var = false;
 int num_objects = 0;
 
-void holes_centers_clbk(const camera_to_cv::points_array::ConstPtr& msg) {
+void objects_centers_clbk(const camera_to_cv::points_array::ConstPtr& msg) {
     //ROS_INFO("first point: x=%.2f, y=%.2f", msg->points[0].x, msg->points[0].y);
     // clear vector of objects
     points_vec_x.clear();
@@ -59,9 +60,9 @@ int main( int argc, char** argv )
   ros::Rate r(1);
   ros::Publisher marker_pub = n.advertise<visualization_msgs::MarkerArray>("visualization_marker_array", 1);
   ros::Publisher table_pub = n.advertise<visualization_msgs::Marker>("visualization_marker_table", 1);
-  ros::Subscriber sub = n.subscribe("chatter", 1000, holes_centers_clbk);
-  ros::Subscriber sub_table_found = n.subscribe ("table_found", 1000, table_found_clbk); // change to table properties message
-  ros::Subscriber sub_table_properties = n.subscribe ("table_properties_chatter", 1000, table_properties_clbk); // change to table properties message
+  ros::Subscriber sub = n.subscribe("object_chatter", 1000, objects_centers_clbk);
+  ros::Subscriber sub_table_found = n.subscribe ("table_found", 1000, table_found_clbk); 
+  ros::Subscriber sub_table_properties = n.subscribe ("table_properties_chatter", 1000, table_properties_clbk);
 
   // Set our initial shape type to be a cube
   uint32_t shape = visualization_msgs::Marker::CYLINDER;
@@ -108,6 +109,15 @@ int main( int argc, char** argv )
 
     if (points_vec_x.size() != 0 && table_found_var == true) 
     {
+      for (int j = 0; j < num_old_objects; j++) // delete markers from previous iteration
+      {
+        visualization_msgs::Marker marker;
+        marker.ns = "object_shape";
+        marker.id = j;
+        marker.action = visualization_msgs::Marker::DELETE;
+        marker_array.markers.push_back(marker);
+      }
+      num_old_objects = num_objects;
       for (int i = 0; i < num_objects; i++)
       {
         visualization_msgs::Marker marker;
