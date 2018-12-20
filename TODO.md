@@ -1,4 +1,4 @@
-### Za nardit:
+### Za naredit:
 ##### OpenCV:
 * Ureditev kode - trenutno vse v classu ImageConverter, naredi funkcije, class da bo bolj pregleden.
 * Zamenjava Publisher/Subscriber s Client/Server -> camera node steče samo takrat ko ga pokličemo - ne išče stalno lukenj in objektov.
@@ -15,15 +15,6 @@
 
 ##### ROS na TP:
 * Naložitev interfaca, da lahko upravljam z Fanucovimi I/O - za premikanje gripperja.
-
-### Delo za naprej / ko bo narejeno vse za pobiranje z eno kamero in enakimi barvami valjev:
-##### Različne barve valjev:
-* zaznavanje barve valjev in odlaganje v škatlo npr. rdeči, zeleni, modri, beli
-* vizualizacija različnih barv v RViz
-##### Stereo kamera:
-* npr. dodajanje Kinect senzorja, ki nam omogoči pobiranje in odlaganje različnih predmetov
-* zaznavanje različnih objektov s Kinectom - za objekt različna rutina kako ga gripper prime
-* vizualizacija različnih objektov v RViz
 
 ### Narejeno:
 ##### Povezava, driverji:
@@ -56,3 +47,12 @@ rosrun camera_to_cv camera_to_cv_node
 
 ##### URDF:
 * Narejen URDF file za Fanuc LR Mate 200 iD 4s
+
+### Delo za naprej / ko bo narejeno vse za pobiranje z eno kamero in enakimi barvami valjev:
+##### Različne barve valjev:
+* zaznavanje barve valjev in odlaganje v škatlo npr. rdeči, zeleni, modri, beli
+* vizualizacija različnih barv v RViz
+##### Stereo kamera:
+* npr. dodajanje Kinect senzorja, ki nam omogoči pobiranje in odlaganje različnih predmetov
+* zaznavanje različnih objektov s Kinectom - za objekt različna rutina kako ga gripper prime
+* vizualizacija različnih objektov v RViz
