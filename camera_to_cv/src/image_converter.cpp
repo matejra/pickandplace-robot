@@ -21,12 +21,12 @@ using namespace std;
 int sigma = 1.2;
 int ksize = 5;
 int erosion_size = 2; 
-double min_contour_area = 20;
+double min_contour_area = 220;
 double max_contour_area = 400;
 float center_proximity = 7.0;
 double contour_area = 0;
-double holes_threshold = 100;
-double object_threshold = 182;
+double holes_threshold = 150;
+double object_threshold = 175;
 int max_rectangle_index = 0;
 bool working_table_limits_found = 0;
 int n_expected_objects = 100;
@@ -67,7 +67,8 @@ class ImageConverter
   // Publishers and subscribers declaration
   image_transport::Subscriber image_sub_;
   image_transport::Publisher image_pub_;
-  ros::Publisher chatter_pub = nh_.advertise<camera_to_cv::points_array>("chatter", 1000);
+  ros::Publisher object_pub = nh_.advertise<camera_to_cv::points_array>("object_chatter", 1000);
+  ros::Publisher holes_pub = nh_.advertise<camera_to_cv::points_array>("holes_chatter", 1000);
   ros::Publisher table_properties_pub = nh_.advertise<camera_to_cv::table_properties>("table_properties_chatter", 1000);
   ros::Publisher table_found_pub = nh_.advertise<std_msgs::Bool>("table_found", 1000);
 
@@ -104,9 +105,6 @@ public:
     Mat image, im_gray, im_bw_canny, im_gray_edges;
     image = cv_ptr->image;
     cvtColor(image, im_gray, COLOR_BGR2GRAY);
-    //char* imageName = argv[1];
-    //image = imread( imageName, 1 );
-    //cvtColor(image, im_gray, COLOR_BGR2GRAY);
     Mat bw;
 	  Canny(im_gray, im_bw_canny, 100, 300, 5);
     GaussianBlur(im_gray, im_gray, Size(ksize, ksize), sigma, sigma);
@@ -232,11 +230,12 @@ public:
           double area_objects = contourArea(contours_objects[i]);
           Rect r_objects = boundingRect(contours_objects[i]);
           int radius_objects = r_objects.width / 2;
-
+          
           if (abs(1 - ((double)r_objects.width / r_objects.height)) <= 0.3 &&
               abs(1 - (area_objects / (CV_PI * pow(radius_objects, 2)))) <= 0.3 &&
               area_objects > min_contour_area && area_objects < max_contour_area)
               {
+                cout << "Object " << i << " area: " << area_objects << "\n";
                 minEnclosingCircle( (Mat)contours_objects[i], center_objects[j], radius_vect_objects[j] );
                 if (center_objects[j].x > 1.0 && center_objects[j].y > 1.0 
                 && center_objects[j].x < 640.0 && center_objects[j].y < 480.0 )
@@ -335,6 +334,7 @@ public:
         }
       }
       camera_to_cv::points_array points_msg;
+      camera_to_cv::points_array holes_points_msg;
 
       for (int i = 0; i < true_object_center.size(); i++)
       {
@@ -348,6 +348,11 @@ public:
       for (int i = 0; i < center_holes.size(); i++)
       {
         cout << "Hole [" << i << "] coordinates -> x: " << center_holes[i].x << ", y: " << center_holes[i].y << "\n";
+        geometry_msgs::Point point_hole;
+        point_hole.x = center_holes[i].x;
+        point_hole.y = center_holes[i].y;
+        point_hole.z = 0;
+        holes_points_msg.points.push_back(point_hole);
       }
       
 
@@ -366,7 +371,8 @@ public:
     // Output modified video stream
     image_pub_.publish(cv_ptr->toImageMsg());
     if (working_table_limits_found == 1) {
-      chatter_pub.publish(points_msg);
+      object_pub.publish(points_msg);
+      holes_pub.publish(holes_points_msg);
     }
     working_table_limits_found = 0;
     table_found_pub.publish(table_found_msg);
