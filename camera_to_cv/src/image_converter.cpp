@@ -25,15 +25,18 @@ double min_contour_area = 220;
 double max_contour_area = 400;
 float center_proximity = 7.0;
 double contour_area = 0;
-double holes_threshold = 150;
-double object_threshold = 175;
+double holes_threshold = 100;
+double object_threshold = 172;
 int max_rectangle_index = 0;
 bool working_table_limits_found = 0;
 int n_expected_objects = 100;
+int surrounding_rectangle_size = 40;
+int sum_current_rectangle = 0;
+int avg_current_rectangle = 0;
 static const std::string OPENCV_WINDOW = "Color image";
-Rect working_table;
-Mat im_working_table_gray;
-
+Rect working_table, bounding_patch;
+Mat im_working_table_gray, image, im_orig, im_gray, im_bw_canny, im_gray_edges, im_bw_holes_, im_blue_channel;
+Mat channel[3];
 
 static double angle(cv::Point pt1, cv::Point pt2, cv::Point pt0)
 {
@@ -42,21 +45,6 @@ static double angle(cv::Point pt1, cv::Point pt2, cv::Point pt0)
 	double dx2 = pt2.x - pt0.x;
 	double dy2 = pt2.y - pt0.y;
 	return (dx1*dx2 + dy1*dy2)/sqrt((dx1*dx1 + dy1*dy1)*(dx2*dx2 + dy2*dy2) + 1e-10);
-}
-
-void setLabel(Mat& im, const string label, vector<Point>& contour)
-{
-	int fontface = FONT_HERSHEY_SIMPLEX;
-	double scale = 0.4;
-	int thickness = 1;
-	int baseline = 0;
-
-	Size text = getTextSize(label, fontface, scale, thickness, &baseline);
-	Rect r = boundingRect(contour);
-
-	Point pt(r.x + ((r.width - text.width) / 2), r.y + ((r.height + text.height) / 2));
-	rectangle(im, pt + Point(0, baseline), pt + Point(text.width, -text.height), CV_RGB(255,255,255), CV_FILLED);
-	putText(im, label, pt, fontface, scale, CV_RGB(0,0,0), thickness, 8);
 }
 
 class ImageConverter
@@ -102,36 +90,39 @@ public:
       return;
     }
     ///////// Begin image processing /////////
-    Mat image, im_gray, im_bw_canny, im_gray_edges;
     image = cv_ptr->image;
+    split(image, channel);
+    im_blue_channel = channel[0];
     cvtColor(image, im_gray, COLOR_BGR2GRAY);
-    Mat bw;
-	  Canny(im_gray, im_bw_canny, 100, 300, 5);
+	  Canny(im_gray, im_bw_canny, 100, 300, 5); // Canny detector is used for table finding
+    im_gray = im_blue_channel; // Gray image out of blue channel (to improve contrast)
     GaussianBlur(im_gray, im_gray, Size(ksize, ksize), sigma, sigma);
     
     ///////// Getting working table limits
     // shape detection based on https://github.com/bsdnoobz/opencv-code/blob/master/shape-detect.cpp
-    // should be done just once - to find the table
+    // Each time the table is found publish a message containing objects centers locations
     vector< vector <Point> > contours_table;
     vector<Point> approx;
     double largest_rectangle_area = 0;
 
+    // Create a table found message and table properties message
     std_msgs::Bool table_found_msg;
     camera_to_cv::table_properties table_properties_msg;
 
     if (working_table_limits_found == 0)
     {
-      findContours(im_bw_canny, contours_table, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE); // Find the rectangles in the image
-      for (int i = 0; i < contours_table.size(); i ++)                         // iterate through each contour.
+      // Find rectangles in the image
+      findContours(im_bw_canny, contours_table, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE); 
+      for (int i = 0; i < contours_table.size(); i ++)                         
       { 
         approxPolyDP(Mat(contours_table[i]), approx, arcLength(Mat(contours_table[i]), true)*0.02, true);
 
         if (fabs(contourArea(contours_table[i])) < 100 || !isContourConvex(approx))
               continue;
 
-        if (approx.size() >= 4 && approx.size() <= 6)
+        if (approx.size() == 4)
         {
-          // Number of vertices of polygonal curve
+          // Number of vertices of polygonal curve 
           int vtc = approx.size();
 
           // Get the cosines of all corners
@@ -146,15 +137,13 @@ public:
           double mincos = cos.front();
           double maxcos = cos.back();
 
-          // Use the degrees obtained above and the number of vertices
-          // to determine the shape of the contour
-          if (vtc == 4 && mincos >= -0.1 && maxcos <= 0.3)
+          // Use the degrees obtained above to check if it is a rectangle
+          if (mincos >= -0.1 && maxcos <= 0.3)
           {
-            setLabel(im_bw_canny, "RECT", contours_table[i]);
-            // Find the greatest rectangle
+            // Find the largest rectangle
             Rect r = boundingRect(contours_table[i]);
             double rectangle_area = r.height*r.width; 
-            if (rectangle_area>largest_rectangle_area) //find the largest rectangle
+            if (rectangle_area>largest_rectangle_area)
             {
               largest_rectangle_area = rectangle_area;
               max_rectangle_index = i;
@@ -170,12 +159,13 @@ public:
       if (largest_rectangle_area > table_limit_area) { 
         working_table = Rect(0,0,im_gray.cols,im_gray.rows) & working_table;
         im_working_table_gray = im_gray(working_table).clone();
-        //imshow("Working table", im_working_table_gray);
         working_table_limits_found = 1;
         cout << "Working table found \n";
       }
     }
+    ///////// End working table limits
 
+    // Fill the table properties message
     if (working_table_limits_found == 1)
     {
       table_properties_msg.width = im_working_table_gray.cols;
@@ -197,7 +187,7 @@ public:
       im_gray_ = im_gray;
     }
     imshow("Color without label", image);
-    ///////// End working table limits
+    
 
     //////// Find the object centers based on 1. thresholding of image (the "whitest" objects) and 2. Circle shape
     threshold(im_gray_, im_bw_objects, object_threshold, 255.0, THRESH_BINARY);
@@ -217,7 +207,7 @@ public:
     radius_vect_objects.reserve(n_expected_objects);
 
     int j = 0;
-    for (int i = 0; i < contours_objects.size(); i ++)                         // iterate through each contour.
+    for (int i = 0; i < contours_objects.size(); i ++)
     {
       approxPolyDP(Mat(contours_objects[i]), approx_objects, arcLength(Mat(contours_objects[i]), true)*0.02, true);
 
@@ -250,10 +240,8 @@ public:
         }
     }
     //////// End of object centers
-//
+
     //////// Find the holes centers
-    Mat im_bw_holes_;
-    // adaptiveThreshold(im_gray_, im_bw_holes_, 255, ADAPTIVE_THRESH_GAUSSIAN_C, THRESH_BINARY, 25, 5);
     threshold(im_gray_, im_bw_holes_, holes_threshold, 255.0, THRESH_BINARY);
     // Opening - erosion followed by dilation for noise (glare) removal
     Mat element = getStructuringElement( MORPH_ELLIPSE, 
@@ -263,12 +251,8 @@ public:
     erode( im_bw_holes_, im_bw_holes_, element );
     dilate( im_bw_holes_, im_bw_holes_, element );
 
-
-    //Canny(im_gray_, im_bw_holes_, 10, 50, 3);
     vector< vector <Point> > contours_holes;
     vector<Point> approx_holes;
-
-
 
     findContours(im_bw_holes_, contours_holes, CV_RETR_LIST, CV_CHAIN_APPROX_SIMPLE); // Find the circles in the image based on Canny edge d.
     vector<Point2f>center_holes;
@@ -296,7 +280,6 @@ public:
           if (abs(1 - ((double)r.width / r.height)) <= 0.5 &&
               abs(1 - (area / (CV_PI * pow(radius, 2)))) <= 0.5)
             {
-              //setLabel(im_bw_holes_, "CIR", contours_holes[i]);
               minEnclosingCircle( (Mat)contours_holes[i], center_holes[i], radius_vect_holes[i] );
 
               for (int j = 0; j < center_objects.size(); j++)
@@ -355,9 +338,6 @@ public:
         holes_points_msg.points.push_back(point_hole);
       }
       
-
-      // cout << center_holes.size();
-//
       //////// End of the holes centers
 
       //imshow("Color image", cv_ptr->image);
