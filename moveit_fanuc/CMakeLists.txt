@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(moveit_fanuc)
 add_compile_options(-std=c++11)
+set(CURL_LIBRARY "-lcurl") 
 
 find_package(catkin REQUIRED COMPONENTS
   roscpp
@@ -11,6 +12,7 @@ find_package(catkin REQUIRED COMPONENTS
   camera_to_cv
   tf2_ros
 )
+find_package(CURL REQUIRED)
 
 catkin_package(
   CATKIN_DEPENDS
@@ -23,10 +25,11 @@ catkin_package(
 include_directories(
   include
   ${catkin_INCLUDE_DIRS}
+  ${CURL_INCLUDE_DIR}
 )
 
 
 add_executable(move_group_interface_tutorial src/move_group_interface_tutorial.cpp)
-target_link_libraries(move_group_interface_tutorial ${catkin_LIBRARIES} ${Boost_LIBRARIES})
+target_link_libraries(move_group_interface_tutorial ${catkin_LIBRARIES} ${Boost_LIBRARIES} ${CURL_LIBRARIES})
 
 

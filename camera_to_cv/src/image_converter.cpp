@@ -25,8 +25,8 @@ double min_contour_area = 220;
 double max_contour_area = 400;
 float center_proximity = 7.0;
 double contour_area = 0;
-double holes_threshold = 100;
-double object_threshold = 172;
+double holes_threshold = 95;
+double object_threshold = 175;
 int max_rectangle_index = 0;
 bool working_table_limits_found = 0;
 int n_expected_objects = 100;
@@ -95,9 +95,10 @@ public:
     im_blue_channel = channel[0];
     cvtColor(image, im_gray, COLOR_BGR2GRAY);
 	  Canny(im_gray, im_bw_canny, 100, 300, 5); // Canny detector is used for table finding
+
     im_gray = im_blue_channel; // Gray image out of blue channel (to improve contrast)
     GaussianBlur(im_gray, im_gray, Size(ksize, ksize), sigma, sigma);
-    
+    imshow("Canny table", im_bw_canny);
     ///////// Getting working table limits
     // shape detection based on https://github.com/bsdnoobz/opencv-code/blob/master/shape-detect.cpp
     // Each time the table is found publish a message containing objects centers locations
@@ -120,7 +121,7 @@ public:
         if (fabs(contourArea(contours_table[i])) < 100 || !isContourConvex(approx))
               continue;
 
-        if (approx.size() == 4)
+        if (approx.size() >= 4 && approx.size() <= 6)
         {
           // Number of vertices of polygonal curve 
           int vtc = approx.size();
@@ -138,7 +139,7 @@ public:
           double maxcos = cos.back();
 
           // Use the degrees obtained above to check if it is a rectangle
-          if (mincos >= -0.1 && maxcos <= 0.3)
+          if (mincos >= -0.1 && maxcos <= 0.3 && vtc == 4)
           {
             // Find the largest rectangle
             Rect r = boundingRect(contours_table[i]);
@@ -186,7 +187,6 @@ public:
     } else {
       im_gray_ = im_gray;
     }
-    imshow("Color without label", image);
     
 
     //////// Find the object centers based on 1. thresholding of image (the "whitest" objects) and 2. Circle shape
@@ -225,7 +225,7 @@ public:
               abs(1 - (area_objects / (CV_PI * pow(radius_objects, 2)))) <= 0.3 &&
               area_objects > min_contour_area && area_objects < max_contour_area)
               {
-                cout << "Object " << i << " area: " << area_objects << "\n";
+                //cout << "Object " << i << " area: " << area_objects << "\n";
                 minEnclosingCircle( (Mat)contours_objects[i], center_objects[j], radius_vect_objects[j] );
                 if (center_objects[j].x > 1.0 && center_objects[j].y > 1.0 
                 && center_objects[j].x < 640.0 && center_objects[j].y < 480.0 )
@@ -321,30 +321,38 @@ public:
 
       for (int i = 0; i < true_object_center.size(); i++)
       {
-        cout << "Object [" << i << "] coordinates -> x: " << true_object_center[i].x << ", y: " << true_object_center[i].y << "\n";
-        geometry_msgs::Point point;
-        point.x = true_object_center[i].x;
-        point.y = true_object_center[i].y;
-        point.z = 0;
-        points_msg.points.push_back(point);
+        if (working_table_limits_found == 1)
+        {
+          cout << "Object [" << i << "] coordinates -> x: " << true_object_center[i].x << ", y: " << true_object_center[i].y << "\n";
+          geometry_msgs::Point point;
+          point.x = true_object_center[i].x;
+          point.y = true_object_center[i].y;
+          point.z = 0;
+          if (point.x > 0 && point.x < 640 && point.y > 0 && point.y < 480)
+          {
+            points_msg.points.push_back(point);
+          }
+        }
       }
       for (int i = 0; i < center_holes.size(); i++)
       {
-        cout << "Hole [" << i << "] coordinates -> x: " << center_holes[i].x << ", y: " << center_holes[i].y << "\n";
-        geometry_msgs::Point point_hole;
-        point_hole.x = center_holes[i].x;
-        point_hole.y = center_holes[i].y;
-        point_hole.z = 0;
-        holes_points_msg.points.push_back(point_hole);
+        if (working_table_limits_found == 1)
+        {
+          cout << "Hole [" << i << "] coordinates -> x: " << center_holes[i].x << ", y: " << center_holes[i].y << "\n";
+          geometry_msgs::Point point_hole;
+          point_hole.x = center_holes[i].x;
+          point_hole.y = center_holes[i].y;
+          point_hole.z = 0;
+          if (point_hole.x > 0 && point_hole.x < 640 && point_hole.y > 0 && point_hole.y < 480)
+          {
+            holes_points_msg.points.push_back(point_hole);
+          }
+        }
       }
       
       //////// End of the holes centers
 
-      //imshow("Color image", cv_ptr->image);
-      imshow(OPENCV_WINDOW, image);
-
-      //imshow(OPENCV_WINDOW, im_gray_);
-      imshow("Holes thresholding", im_bw_holes_);
+      
       ///////// End image processing /////////
     waitKey(3);
     
@@ -354,6 +362,8 @@ public:
       object_pub.publish(points_msg);
       holes_pub.publish(holes_points_msg);
     }
+    imshow(OPENCV_WINDOW, image);
+    imshow("Holes thresholding", im_bw_holes_);
     working_table_limits_found = 0;
     table_found_pub.publish(table_found_msg);
     table_properties_pub.publish(table_properties_msg);

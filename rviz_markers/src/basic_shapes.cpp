@@ -19,7 +19,8 @@ float working_table_h = 250;
 // todo: change constants constants of camera im. size to published camera im. size 
 float camera_w = 640;
 float camera_h = 480;
-float pixel_to_m = 839; // initialize pixel to m ratio, if table is not found. 839 px = 1m
+float pixel_to_m_table = 833; // initialize pixel to m ratio, if table is not found. 839 px = 1m
+float pixel_to_m_object = 867; 
 int num_old_objects = 0;
 
 std::vector<double >points_vec_x;
@@ -50,7 +51,7 @@ void table_found_clbk(const std_msgs::Bool::ConstPtr& found) {
 void table_properties_clbk(const camera_to_cv::table_properties::ConstPtr& prop) {
     working_table_w = prop->width;
     working_table_h = prop->height;
-    pixel_to_m = working_table_w/0.498;
+    pixel_to_m_table = working_table_w/0.498;
 }
 
 int main( int argc, char** argv )
@@ -137,8 +138,8 @@ int main( int argc, char** argv )
 
           /*if (table_found_var == true) {*/
             // Set the pose of the marker.  This is a full 6DOF pose relative to the frame/time specified in the header
-            marker.pose.position.x = table_x - ((working_table_h - points_vec_y[i])/pixel_to_m); //
-            marker.pose.position.y = table_y - ((working_table_w - points_vec_x[i])/pixel_to_m); //
+            marker.pose.position.x = table_x - ((working_table_h - 209)/pixel_to_m_table) - (209-points_vec_y[i])/pixel_to_m_object; //
+            marker.pose.position.y = table_y - ((working_table_w - 227)/pixel_to_m_table) - (227-points_vec_x[i])/pixel_to_m_object; //
           /*} else {
             marker.pose.position.x = camera_x - ((camera_h/2 - points_vec_y[i])/pixel_to_m);
             marker.pose.position.y = camera_y - ((camera_w/2 - points_vec_x[i])/pixel_to_m);
