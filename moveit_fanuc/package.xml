@@ -29,8 +29,8 @@
   <build_depend>tf2_eigen</build_depend>
   <build_depend>tf2_geometry_msgs</build_depend>
   <build_depend>camera_to_cv</build_depend>
+  <build_depend>set_io</build_depend>
 
-  <run_depend>panda_moveit_config</run_depend>
   <run_depend>pluginlib</run_depend>
   <run_depend>moveit_core</run_depend>
   <run_depend>moveit_commander</run_depend>

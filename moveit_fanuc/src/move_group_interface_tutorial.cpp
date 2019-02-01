@@ -12,9 +12,13 @@
 #include <std_msgs/Bool.h>
 #include <curl/curl.h>
 #include <moveit/trajectory_processing/iterative_time_parameterization.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+#include "set_io/set_io.h"
+
 
 float table_x;
 float table_y;
+float camera_x, camera_y;
 std::vector<geometry_msgs::Point> objcoord_vec;
 std::vector<geometry_msgs::Point> holescoord_vec;
 std::vector<geometry_msgs::Point>object_absolute_position_vec;
@@ -28,8 +32,8 @@ int num_holes = 0;
 int numobj_belowzero = 0;
 int numobj_abovezero = 0;
 // Initialize working table width and height constants, if table is found program corrects table size in table_properties_clbk
-float pixel_to_m_table = 833; // initialize pixel to m ratio, if table is not found. 839 px = 1m
-int pixel_to_m_object = 867; // pixel to m ratio on height of objects
+float pixel_to_m_table = 836; // initialize pixel to m ratio, if table is not found. 839 px = 1m
+int pixel_to_m_object = 875; // pixel to m ratio on height of objects
 float working_table_w = 418;
 float working_table_h = 250;
 int optical_center_x = 227;
@@ -38,6 +42,17 @@ const double jump_threshold = 0.0;
 const double eef_step = 0.01;
 const double eef_step_pickplace = 0.002;
 double fraction = 0;
+float inv_sc_proj_mat[3][3] = {
+     {0.00116,     0,     -0.34389},
+     {0,     0.00116,     -0.02583},
+     {0,     0,     0.84388}
+    }; 
+char* robot_ip = (char*)"robottest32.000webhostapp.com/action_page.php?";
+char* io_op = (char*)"write";
+char* io_type = (char*)"9";
+char* io_idx_open = (char*)"7";
+char* io_idx_close = (char*)"8";
+char* io_val = (char*)"1";
 
 void table_found_clbk(const std_msgs::Bool::ConstPtr& found) {
     table_found_var = found->data;
@@ -46,7 +61,7 @@ void table_found_clbk(const std_msgs::Bool::ConstPtr& found) {
 void table_properties_clbk(const camera_to_cv::table_properties::ConstPtr& prop) {
     working_table_w = prop->width;
     working_table_h = prop->height;
-    pixel_to_m_table = working_table_w/0.498;
+    pixel_to_m_table = working_table_w/0.50;
 }
 
 void objects_centers_clbk(const camera_to_cv::points_array::ConstPtr& msg) {
@@ -78,6 +93,44 @@ void holes_centers_clbk(const camera_to_cv::points_array::ConstPtr& msg) {
 
     }
 }
+
+/*void openGripper(trajectory_msgs::JointTrajectory& posture)
+{
+  // BEGIN_SUB_TUTORIAL open_gripper
+  // Add both finger joints of panda robot.
+  posture.joint_names.resize(2);
+  posture.joint_names[0] = "finger_joint1";
+  posture.joint_names[1] = "finger_joint2";
+
+  // CURL command, if suceeds, proceed with opening the grip in simulation
+
+  // Set them as open, wide enough for the object to fit. 
+  posture.points.resize(1);
+  posture.points[0].positions.resize(2);
+  posture.points[0].positions[0] = 0.00;
+  posture.points[0].positions[1] = 0.00;
+  posture.points[0].time_from_start = ros::Duration(0.5);
+  // END_SUB_TUTORIAL
+  
+}
+
+void closedGripper(trajectory_msgs::JointTrajectory& posture)
+{
+  // BEGIN_SUB_TUTORIAL closed_gripper
+  // Add both finger joints of panda robot. 
+  posture.joint_names.resize(2);
+  posture.joint_names[0] = "finger_joint1";
+  posture.joint_names[1] = "finger_joint2";
+
+  // CURL command, if suceeds, proceed with closing the grip in simulation
+
+  posture.points.resize(1);
+  posture.points[0].positions.resize(2);
+  posture.points[0].positions[0] = 0.005;
+  posture.points[0].positions[1] = 0.005;
+  posture.points[0].time_from_start = ros::Duration(0.5);
+  // END_SUB_TUTORIAL
+}*/
 
 /*std::vector<double> obj_belowzero(int n_obj, std::vector<double > obj_abspos_xvec) {
     std::vector<double> obj_belowzero_coor;
@@ -115,6 +168,8 @@ int main(int argc, char** argv)
   ros::Subscriber sub_holes = node_handle.subscribe("holes_chatter", 1000, holes_centers_clbk);
   ros::Subscriber sub_table_found = node_handle.subscribe ("table_found", 1000, table_found_clbk);
   ros::Subscriber sub_table_properties = node_handle.subscribe ("table_properties_chatter", 1000, table_properties_clbk);
+  ros::ServiceClient client = node_handle.serviceClient<set_io::set_io>("set_io");
+  set_io::set_io srv;
   tf2_ros::Buffer tfBuffer;
   tf2_ros::TransformListener tfListener(tfBuffer);
 
@@ -136,13 +191,28 @@ int main(int argc, char** argv)
   table_x = transformStamped_table.transform.translation.x;
   table_y = transformStamped_table.transform.translation.y;
 
+  geometry_msgs::TransformStamped transformStamped;
+    try{
+      transformStamped = tfBuffer.lookupTransform("base_link", "camera_frame",
+                               ros::Time(0));
+    }
+    catch (tf2::TransformException &ex) {
+      ROS_WARN("%s",ex.what());
+    }
+
+  camera_x = transformStamped.transform.translation.x;
+  camera_y = transformStamped.transform.translation.y;
+
   if (objcoord_vec.size() != 0 && table_found_var == true && flag_firsttime == 0) 
   {
     object_absolute_position_vec.clear();
     for (int i = 0; i < num_objects; i++)
     {
-      object_absolute_position.x = table_x - ((working_table_h - optical_center_y)/pixel_to_m_table) - (optical_center_y-objcoord_vec[i].y)/pixel_to_m_object;
-      object_absolute_position.y = table_y - ((working_table_w - optical_center_x)/pixel_to_m_table) - (optical_center_x-objcoord_vec[i].x)/pixel_to_m_object;
+      //object_absolute_position.x = table_x - ((working_table_h - optical_center_y)/pixel_to_m_table) - (optical_center_y-objcoord_vec[i].y)/pixel_to_m_object;
+      //object_absolute_position.y = table_y - ((working_table_w - optical_center_x)/pixel_to_m_table) - (optical_center_x-objcoord_vec[i].x)/pixel_to_m_object;
+      object_absolute_position.x = camera_x+inv_sc_proj_mat[1][1]*(objcoord_vec[i].y-optical_center_y);
+      object_absolute_position.y = camera_y+inv_sc_proj_mat[0][0]*(objcoord_vec[i].x-optical_center_x);
+
       object_absolute_position_vec.push_back(object_absolute_position);
       //std::cout << "Object[" << i << "]  x: " << object_absolute_position.x << ", y: " << object_absolute_position.y << "\n";
       //object_absolute_position_x_vec.push_back(table_x - ((working_table_h - objcoord_vec.y[i])/pixel_to_m_table) + ); //
@@ -155,17 +225,20 @@ int main(int argc, char** argv)
     holes_absolute_position_vec.clear();
     for (int i = 0; i < num_holes; i++)
     {
-      holes_absolute_position.x = table_x - ((working_table_h - optical_center_y)/pixel_to_m_table) - (optical_center_y-holescoord_vec[i].y)/pixel_to_m_table;
-      holes_absolute_position.y = table_y - ((working_table_w - optical_center_x)/pixel_to_m_table) - (optical_center_x-holescoord_vec[i].x)/pixel_to_m_table; // if y >opt centery: - 0.0215 * (optical_center_x-holescoord_vec[i].x)/pixel_to_m_table
-      if (holescoord_vec[i].x > optical_center_x) // shadow correction
+      holes_absolute_position.x = camera_x+(holescoord_vec[i].y-optical_center_y)/pixel_to_m_table;
+      holes_absolute_position.y = camera_y+(holescoord_vec[i].x-optical_center_x)/pixel_to_m_table + 0.002;
+      
+      //holes_absolute_position.x = table_x - ((working_table_h - optical_center_y)/pixel_to_m_table) - (optical_center_y-holescoord_vec[i].y)/pixel_to_m_table;
+      //holes_absolute_position.y = table_y - ((working_table_w - optical_center_x)/pixel_to_m_table) - (optical_center_x-holescoord_vec[i].x)/pixel_to_m_table; // if y >opt centery: - 0.0215 * (optical_center_x-holescoord_vec[i].x)/pixel_to_m_table
+      /*if (holescoord_vec[i].x > optical_center_x) // shadow correction
       {
         if (holes_absolute_position.y > 0.2)
         {
           holes_absolute_position.y += - 0.017 * (optical_center_x-holescoord_vec[i].x)/pixel_to_m_table;
         } else {
-          holes_absolute_position.y += - 0.05 * (optical_center_x-holescoord_vec[i].x)/pixel_to_m_table;
+          holes_absolute_position.y += - 0.035 * (optical_center_x-holescoord_vec[i].x)/pixel_to_m_table;
         }
-      }
+      }*/
       holes_absolute_position_vec.push_back(holes_absolute_position);
       //std::cout << "Hole[" << i << "]  x: " << holes_absolute_position.x << ", y: " << holes_absolute_position.y << "\n";
       //object_absolute_position_x_vec.push_back(table_x - ((working_table_h - objcoord_vec.y[i])/pixel_to_m_table) + ); //
@@ -279,7 +352,12 @@ int main(int argc, char** argv)
   move_group.setJointValueTarget(joint_group_positions);
 
   success = (move_group.plan(my_plan) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
-  ROS_INFO_NAMED("tutorial", "Visualizing robot going to start position", success ? "" : "FAILED");
+  if (success)
+  {
+    ROS_INFO_NAMED("tutorial", "Visualizing robot going to start position");
+  } else {
+    ROS_INFO_NAMED("tutorial", "Visualizing robot going to start position FAILED");
+  }
 
   // Visualize the plan in RViz
   visual_tools.deleteAllMarkers();
@@ -313,10 +391,15 @@ int main(int argc, char** argv)
     while (object_absolute_position_vec[j].y > 0) {
       j++;
     }
+    if (j >= object_absolute_position_vec.size())
+    {
+      ROS_INFO_NAMED("tutorial", "All objects have positive y coordinate. Aborting.");
+      break;
+    }
 
     std::cout << "OBJ x " << object_absolute_position_vec[j].x << "y " << object_absolute_position_vec[j].y;
 
-    target_pose_pickplace.position.z = 0.22;
+    target_pose_pickplace.position.z = 0.23;
     waypoints_pick.push_back(target_pose_pickplace); 
     target_pose_pickplace.position.y = object_absolute_position_vec[j].y; 
     waypoints_pick.push_back(target_pose_pickplace); 
@@ -338,7 +421,7 @@ int main(int argc, char** argv)
     visual_tools.prompt("Press 'next' in the RvizVisualToolsGui window to continue the demo");
     move_group.execute(plan);
 
-    target_pose_pickplace.position.z = 0.155;
+    target_pose_pickplace.position.z = 0.165;
     waypoints_down_obj.push_back(target_pose_pickplace); 
     target_pose_pickplace.position.y = object_absolute_position_vec[j].y; 
     waypoints_down_obj.push_back(target_pose_pickplace); 
@@ -356,15 +439,19 @@ int main(int argc, char** argv)
     plan_down.trajectory_ = trajectory_down;
     sleep(1.0);
     // Visualize the plan in RViz
+    visual_tools.trigger();
+    
+    visual_tools.prompt("Press 'next' in the RvizVisualToolsGui window to continue the demo");
     move_group.execute(plan_down);
 
-    CURL *curl;
+    /*CURL *curl;
     CURLcode res;
 
     curl = curl_easy_init();
     if(curl) 
     {
-      curl_easy_setopt(curl, CURLOPT_URL, "http://192.168.1.50/KAREL/ros_cgio?io_op=write&io_type=9&io_idx=8&io_val=1"); // CLOSE gripper
+      curl_easy_setopt(curl, CURLOPT_URL, "http://robottest32.000webhostapp.com/action_page.php?io_op=write&io_type=9&io_idx=8&io_val=1"); // CLOSE gripper
+      //curl_easy_setopt(curl, CURLOPT_URL, "http://192.168.1.50/KAREL/ros_cgio?io_op=write&io_type=9&io_idx=8&io_val=1"); // CLOSE gripper
         // Perform the request, res will get the return code  
       res = curl_easy_perform(curl);
       // Check for errors 
@@ -374,9 +461,32 @@ int main(int argc, char** argv)
   
       // always cleanup 
       curl_easy_cleanup(curl);
+    }*/
+
+    srv.request.robot_ip = robot_ip;
+    srv.request.io_op = io_op;
+    srv.request.io_type = io_type;
+    srv.request.io_idx = io_idx_close;
+    srv.request.io_val = io_val;
+    
+    if (client.call(srv))
+    {
+      if (srv.response.success.c_str() != "1")
+      {
+        ROS_ERROR("Failed to open/close the gripper");
+        return 1;   
+        // SLEEP 3 SEC, TRY AGAIN
+      } else {
+        ROS_INFO("Opening/closing the gripper SUCEEDED");
+      }
+    }
+    else
+    {
+      ROS_ERROR("Failed to call service set_io");
+      return 1;
     }
 
-    target_pose_pickplace.position.z = 0.22;
+    target_pose_pickplace.position.z = 0.23;
     waypoints_up.push_back(target_pose_pickplace); 
     target_pose_pickplace.position.y = object_absolute_position_vec[j].y; 
     waypoints_up.push_back(target_pose_pickplace); 
@@ -394,6 +504,9 @@ int main(int argc, char** argv)
     plan_up.trajectory_ = trajectory_up;
     sleep(1.0);
     // Visualize the plan in RViz
+    visual_tools.trigger();
+    
+    visual_tools.prompt("Press 'next' in the RvizVisualToolsGui window to continue the demo");
     move_group.execute(plan_up);
 
     while (holes_absolute_position_vec[k].y < 0) { // add error if there is no hole that exists
@@ -404,7 +517,7 @@ int main(int argc, char** argv)
     waypoints_place.push_back(target_pose_pickplace);
     target_pose_pickplace.position.x = holes_absolute_position_vec[k].x;
     waypoints_place.push_back(target_pose_pickplace); 
-    target_pose_pickplace.position.z = 0.22;
+    target_pose_pickplace.position.z = 0.23;
     waypoints_place.push_back(target_pose_pickplace);
 
     move_group.setMaxVelocityScalingFactor(0.1);
@@ -420,14 +533,14 @@ int main(int argc, char** argv)
     plan_2.trajectory_ = trajectory_2;
     sleep(1.0);
 
-    /*visual_tools.trigger();
+    visual_tools.trigger();
     
-    visual_tools.prompt("Press 'next' in the RvizVisualToolsGui window to continue the demo");*/
+    visual_tools.prompt("Press 'next' in the RvizVisualToolsGui window to continue the demo");
 
     move_group.execute(plan_2);
     std::cout << "k: " << k << " j: " << j << " holesabsvecsize: " << holes_absolute_position_vec.size() << " objabsvecsize: " << object_absolute_position_vec.size() << "\n";
     
-    target_pose_pickplace.position.z = 0.168;
+    target_pose_pickplace.position.z = 0.182;
     waypoints_down_hole.push_back(target_pose_pickplace); 
     target_pose_pickplace.position.y = holes_absolute_position_vec[k].y; 
     waypoints_down_hole.push_back(target_pose_pickplace); 
@@ -445,27 +558,44 @@ int main(int argc, char** argv)
     plan_down_hole.trajectory_ = trajectory_down_hole;
     sleep(1.0);
     // Visualize the plan in RViz
-    /*visual_tools.trigger();
-    visual_tools.prompt("Press 'next' in the RvizVisualToolsGui window to continue the demo");*/
+    visual_tools.trigger();
+    visual_tools.prompt("Press 'next' in the RvizVisualToolsGui window to continue the demo");
     move_group.execute(plan_down_hole);
+    sleep(1.0);
     
-    
-    CURL *curl_2;
+    /*CURL *curl_2;
     CURLcode res_2;
 
     curl_2 = curl_easy_init();
     if(curl_2) 
     {
-      curl_easy_setopt(curl_2, CURLOPT_URL, "http://192.168.1.50/KAREL/ros_cgio?io_op=write&io_type=9&io_idx=7&io_val=1"); // OPEN gripper
+      curl_easy_setopt(curl_2, CURLOPT_URL, "http://robottest32.000webhostapp.com/action_page.php?io_op=write&io_type=9&io_idx=7&io_val=1"); // OPEN gripper
+      //curl_easy_setopt(curl_2, CURLOPT_URL, "http://192.168.1.50/KAREL/ros_cgio?io_op=write&io_type=9&io_idx=7&io_val=1"); // OPEN gripper
       // Perform the request, res will get the return code  
       res_2 = curl_easy_perform(curl_2);
       // Check for errors 
-      if(res != CURLE_OK)
+      if(res_2 != CURLE_OK)
         fprintf(stderr, "curl_easy_perform() failed: %s\n",
-                curl_easy_strerror(res));
+                curl_easy_strerror(res_2));
   
       // always cleanup 
       curl_easy_cleanup(curl_2);
+    }*/
+
+    srv.request.robot_ip = robot_ip;
+    srv.request.io_op = io_op;
+    srv.request.io_type = io_type;
+    srv.request.io_idx = io_idx_open;
+    srv.request.io_val = io_val;
+
+    if (client.call(srv))
+    {
+      ROS_INFO("Response: %s", srv.response.success.c_str());
+    }
+    else
+    {
+      ROS_ERROR("Failed to call service set_io");
+      return 1;
     }
 
     j++;
@@ -485,7 +615,12 @@ int main(int argc, char** argv)
       move_group.setJointValueTarget(joint_group_positions_home);
 
       success = (move_group.plan(my_plan) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
-      ROS_INFO_NAMED("tutorial", "Visualizing robot going to start position", success ? "" : "FAILED");
+      if (success)
+      {
+        ROS_INFO_NAMED("tutorial", "Visualizing robot going to start position");
+      } else {
+        ROS_INFO_NAMED("tutorial", "Visualizing robot going to start position FAILED");
+      }
 
       // Visualize the plan in RViz
       visual_tools.deleteAllMarkers();

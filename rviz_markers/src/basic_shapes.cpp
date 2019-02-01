@@ -9,19 +9,25 @@
 #include <std_msgs/Bool.h>
 #include <tf2/LinearMath/Quaternion.h>
 
-float camera_x;
-float camera_y;
-float table_x;
-float table_y;
+
+float camera_x, camera_y, camera_z;
+float table_x, table_y;
 // Initialize working table width and height constants, if table is found program corrects table size in table_properties_clbk
 float working_table_w = 418;
 float working_table_h = 250;
 // todo: change constants constants of camera im. size to published camera im. size 
 float camera_w = 640;
 float camera_h = 480;
-float pixel_to_m_table = 833; // initialize pixel to m ratio, if table is not found. 839 px = 1m
+float pixel_to_m_table = 833; // initialize pixel to m ratio, if table is not found. 833 px = 1m
 float pixel_to_m_object = 867; 
 int num_old_objects = 0;
+int optical_center_x = 228;
+int optical_center_y = 211;
+float inv_sc_proj_mat[3][3] = {
+     {0.0011642,     0,     -0.34389},
+     {0,     0.00115,     -0.02583},
+     {0,     0,     0.84388}
+    }; 
 
 std::vector<double >points_vec_x;
 std::vector<double >points_vec_y;
@@ -86,6 +92,7 @@ int main( int argc, char** argv )
 
     camera_x = transformStamped.transform.translation.x;
     camera_y = transformStamped.transform.translation.y;
+    camera_z = transformStamped.transform.translation.z;
 
     geometry_msgs::TransformStamped transformStamped_table;
     try{
@@ -138,8 +145,13 @@ int main( int argc, char** argv )
 
           /*if (table_found_var == true) {*/
             // Set the pose of the marker.  This is a full 6DOF pose relative to the frame/time specified in the header
-            marker.pose.position.x = table_x - ((working_table_h - 209)/pixel_to_m_table) - (209-points_vec_y[i])/pixel_to_m_object; //
-            marker.pose.position.y = table_y - ((working_table_w - 227)/pixel_to_m_table) - (227-points_vec_x[i])/pixel_to_m_object; //
+            //marker.pose.position.x = table_x - ((working_table_h - optical_center_y)/pixel_to_m_table) - (optical_center_y-points_vec_y[i])/pixel_to_m_object; //
+            //marker.pose.position.y = table_y - ((working_table_w - optical_center_x)/pixel_to_m_table) - (optical_center_x-points_vec_x[i])/pixel_to_m_object; //
+            
+            //marker.pose.position.x = camera_x + (points_vec_y[i] - optical_center_y)/867; // 718.7*0.84
+            //marker.pose.position.y = camera_y + (points_vec_x[i] - optical_center_x)/867;
+            marker.pose.position.x=camera_x+inv_sc_proj_mat[1][1]*(points_vec_y[i]-optical_center_y);
+            marker.pose.position.y=camera_y+inv_sc_proj_mat[0][0]*(points_vec_x[i]-optical_center_x);
           /*} else {
             marker.pose.position.x = camera_x - ((camera_h/2 - points_vec_y[i])/pixel_to_m);
             marker.pose.position.y = camera_y - ((camera_w/2 - points_vec_x[i])/pixel_to_m);

@@ -1,0 +1,7 @@
+string robot_ip
+string io_op
+string io_type
+string io_idx
+string io_val
+---
+string success
