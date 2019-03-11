@@ -18,57 +18,28 @@ using namespace cv;
 using namespace std;
 
 // Constants for image processing
+int n_objects = 0;
 int sigma = 1.2;
-int ksize = 3;
-int erosion_size = 1; 
+int ksize = 5;
+int erosion_size = 2; 
 double min_contour_area = 220;
 double max_contour_area = 400;
 float center_proximity = 7.0;
+double contour_area = 0;
 double holes_threshold = 100;
-double object_threshold = 190;
+double object_threshold = 172;
 int max_rectangle_index = 0;
 bool working_table_limits_found = 0;
-int n_maxexp_objects = 100;
-static const string OPENCV_WINDOW = "Color image";
+int n_expected_objects = 100;
+int surrounding_rectangle_size = 40;
+int sum_current_rectangle = 0;
+int avg_current_rectangle = 0;
+static const std::string OPENCV_WINDOW = "Color image";
 Rect working_table, bounding_patch;
-Mat im_working_table_gray, image, im_orig, im_adjust, im_holesdetect, im_objectdetect, im_gray, im_bw_canny, im_gray_edges, im_bw_holes_, im_blue_channel;
+Mat im_working_table_gray, image, im_orig, im_gray, im_bw_canny, im_gray_edges, im_bw_holes_, im_blue_channel;
 Mat channel[3];
+vector<Mat> im_objectholepatch;
 
-// Variables for image adjusting - to find the optimal values for current lightning
-int brightness_level = 0;
-int max_brightness = 1000;
-int contrast_level = 0;
-int max_contrast = 100;
-int gamma_level = 1;
-double gamma_=0;
-static const std::string original_image_w = "Original image"; // pointer initializes original_image_w to the unnamed array's first element
-static const std::string adjusted_image = "Adjusted image";
-
-// Final values of contrast, brightness and gamma for object/hole detection
-double gamma_hole = 6.88;
-int brightness_hole = -442;
-int contrast_hole = 7;
-int gamma_object = 0;
-int brightness_object = -552;
-int contrast_object = 3;
-
-// Callback function for parameters contrast, brightness, gamma change
-void ParametersChange(int, void*) 
-{
-  gamma_ = gamma_level/100.0;
-  im_adjust = Mat::zeros( im_orig.size(), im_orig.type() );
-  for( int y = 0; y < im_orig.rows; y++ ) {
-        for( int x = 0; x < im_orig.cols; x++ ) {
-            for( int c = 0; c < im_orig.channels(); c++ ) {
-                im_adjust.at<Vec3b>(y,x)[c] =
-                  saturate_cast<uchar>( pow(im_orig.at<Vec3b>(y,x)[c] / 255.0, gamma_) * 255.0 + contrast_level*im_orig.at<Vec3b>(y,x)[c] - brightness_level );
-            }
-        }
-    }
-  imshow(adjusted_image, im_adjust);
-}
-
-// for contour type
 static double angle(cv::Point pt1, cv::Point pt2, cv::Point pt0)
 {
 	double dx1 = pt1.x - pt0.x;
@@ -120,18 +91,16 @@ public:
       ROS_ERROR("cv_bridge exception: %s", e.what());
       return;
     }
-    ///////// Begin image processing /////////
+///////// Begin image processing /////////
     image = cv_ptr->image;
-    im_orig = image;
     split(image, channel);
     im_blue_channel = channel[0];
     cvtColor(image, im_gray, COLOR_BGR2GRAY);
 	  Canny(im_gray, im_bw_canny, 100, 300, 5); // Canny detector is used for table finding
-    im_gray = channel[2]; // Gray image out of red channel (to improve contrast)
-
-    //GaussianBlur(im_gray, im_gray, Size(ksize, ksize), sigma, sigma);
-    //imshow("Canny table", im_bw_canny);
-    ///////// Getting working table limits
+    im_gray = im_blue_channel; // Gray image out of blue channel (to improve contrast)
+    GaussianBlur(im_gray, im_gray, Size(ksize, ksize), sigma, sigma);
+    
+  ///////// Getting working table limits
     // shape detection based on https://github.com/bsdnoobz/opencv-code/blob/master/shape-detect.cpp
     // Each time the table is found publish a message containing objects centers locations
     vector< vector <Point> > contours_table;
@@ -153,7 +122,7 @@ public:
         if (fabs(contourArea(contours_table[i])) < 100 || !isContourConvex(approx))
               continue;
 
-        if (approx.size() >= 4 && approx.size() <= 6)
+        if (approx.size() == 4)
         {
           // Number of vertices of polygonal curve 
           int vtc = approx.size();
@@ -171,7 +140,7 @@ public:
           double maxcos = cos.back();
 
           // Use the degrees obtained above to check if it is a rectangle
-          if (mincos >= -0.1 && maxcos <= 0.3 && vtc == 4)
+          if (mincos >= -0.1 && maxcos <= 0.3)
           {
             // Find the largest rectangle
             Rect r = boundingRect(contours_table[i]);
@@ -196,7 +165,7 @@ public:
         cout << "Working table found \n";
       }
     }
-    ///////// End working table limits
+  ///////// End working table limits
 
     // Fill the table properties message
     if (working_table_limits_found == 1)
@@ -219,83 +188,18 @@ public:
     } else {
       im_gray_ = im_gray;
     }
+    imshow("Color without label", image);
     
-    im_objectdetect = Mat::zeros( im_gray_.size(), im_gray_.type() );
-    for( int y = 0; y < im_gray_.rows; y++ ) {
-          for( int x = 0; x < im_gray_.cols; x++ ) {
-            im_objectdetect.at<unsigned char>(y,x) = 
-              saturate_cast<uchar>(pow(im_gray_.at<unsigned char>(y,x) / 255.0, gamma_object) * 255.0 + contrast_object*im_gray_.at<unsigned char>(y,x) + brightness_object );
-          }
-      }
 
-    //////// Find the object centers based on 1. thresholding of image (the "whitest" objects) and 2. Circle shape
-    threshold(im_objectdetect, im_bw_objects, object_threshold, 255.0, THRESH_BINARY);
-    
-    // closing operation
-    Mat element = getStructuringElement( MORPH_ELLIPSE, 
-                       Size( 2*erosion_size + 1, 2*erosion_size+1 ),
-                       Point( erosion_size, erosion_size ));
-    dilate( im_bw_objects, im_bw_objects, element );
-    erode( im_bw_objects, im_bw_objects, element );
-    
-    vector< vector <Point> > contours_objects;
-    vector<Point> approx_objects;
-    findContours(im_bw_objects, contours_objects, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE); // Find the contours in the image based on threshold
-    vector<Point2f>center_objects;
-    vector<float>radius_vect_objects;
-    center_objects.reserve(n_maxexp_objects);
-    radius_vect_objects.reserve(n_maxexp_objects);
-
-    for (int i = 0; i < contours_objects.size(); i ++)
-    {
-      approxPolyDP(Mat(contours_objects[i]), approx_objects, arcLength(Mat(contours_objects[i]), true)*0.02, true);
-
-      if (fabs(contourArea(contours_objects[i])) < 100 || !isContourConvex(approx_objects))
-              continue;
-
-        if (approx_objects.size() > 6) // Detects just circles
-        {
-          // Detect and label objects
-          double area_objects = contourArea(contours_objects[i]);
-          Rect r_objects = boundingRect(contours_objects[i]);
-          int radius_objects = r_objects.width / 2;
-          
-          if (abs(1 - ((double)r_objects.width / r_objects.height)) <= 0.3 &&
-              abs(1 - (area_objects / (CV_PI * pow(radius_objects, 2)))) <= 0.3 &&
-              area_objects > min_contour_area && area_objects < max_contour_area)
-              {
-                //cout << "Object " << i << " area: " << area_objects << "\n";
-                minEnclosingCircle( (Mat)contours_objects[i], center_objects[i], radius_vect_objects[i] );
-                if (center_objects[i].x > 1.0 && center_objects[i].y > 1.0 
-                && center_objects[i].x < 640.0 && center_objects[i].y < 480.0 )
-                {
-                  center_objects.push_back(center_objects[i]); // Fill the vector
-                  radius_vect_objects.push_back(radius_vect_objects[i]);
-                  circle( image, center_objects[i], (int)radius_vect_objects[i], Scalar ( 0,255,0), 2, 8, 0 ); // draw green circle around the contour
-                  //cout << "Center Object coordinates" << center_objects[j];            // Show circle coordinates 
-                }
-              }
-        }
-    }
-    //////// End of object centers
-
-    //////// Find the holes centers
-    im_holesdetect = Mat::zeros( im_gray_.size(), im_gray_.type() );
-    for( int y = 0; y < im_gray_.rows; y++ ) {
-          for( int x = 0; x < im_gray_.cols; x++ ) {
-            im_holesdetect.at<unsigned char>(y,x) =
-              saturate_cast<uchar>( pow(im_gray_.at<unsigned char>(y,x) / 255.0, gamma_hole) * 255.0 + contrast_hole*im_gray_.at<unsigned char>(y,x) + brightness_hole );
-          }
-      }
-
-    threshold(im_holesdetect, im_bw_holes_, holes_threshold, 255.0, THRESH_BINARY);
+  //////// Find the holes centers
+    threshold(im_gray_, im_bw_holes_, holes_threshold, 255.0, THRESH_OTSU);
     // Opening - erosion followed by dilation for noise (glare) removal
-    /*Mat element = getStructuringElement( MORPH_ELLIPSE, 
+    Mat element = getStructuringElement( MORPH_ELLIPSE, 
                        Size( 2*erosion_size + 1, 2*erosion_size+1 ),
                        Point( erosion_size, erosion_size ));
     
     erode( im_bw_holes_, im_bw_holes_, element );
-    dilate( im_bw_holes_, im_bw_holes_, element );*/
+    dilate( im_bw_holes_, im_bw_holes_, element );
 
     vector< vector <Point> > contours_holes;
     vector<Point> approx_holes;
@@ -303,11 +207,14 @@ public:
     findContours(im_bw_holes_, contours_holes, CV_RETR_LIST, CV_CHAIN_APPROX_SIMPLE); // Find the circles in the image based on Canny edge d.
     vector<Point2f>center_holes;
     vector<float>radius_vect_holes;
+    vector<Point2f>true_object_center;
+    vector<int>surrounding_avg_brightness_level(contours_holes.size());
     center_holes.reserve(contours_holes.size());
     radius_vect_holes.reserve(contours_holes.size());
+    true_object_center.reserve(n_expected_objects);
     vector <bool> objects_flag (contours_holes.size());
 
-      for (int i = 0; i < contours_holes.size(); i ++)                         // iterate through each contour.
+      for (int i = 0; i < contours_holes.size(); i ++)
       { 
         approxPolyDP(Mat(contours_holes[i]), approx_holes, arcLength(Mat(contours_holes[i]), true)*0.02, true);
 
@@ -321,81 +228,169 @@ public:
           Rect r = boundingRect(contours_holes[i]);
           int radius = r.width / 2;
 
-          if (abs(1 - ((double)r.width / r.height)) <= 0.5 &&
-              abs(1 - (area / (CV_PI * pow(radius, 2)))) <= 0.5)
+          if (abs(1 - ((double)r.width / r.height)) <= 0.3 &&
+              abs(1 - (area / (CV_PI * pow(radius, 2)))) <= 0.3)
             {
               minEnclosingCircle( (Mat)contours_holes[i], center_holes[i], radius_vect_holes[i] );
 
-              for (int j = 0; j < center_objects.size(); j++)
+              // Begin getting objects/holes surrounding brightness
+              if (center_holes[i].x > 20 && center_holes[i].x < (im_gray_.cols-20) 
+              && center_holes[i].y > 20 && center_holes[i].y < (im_gray_.rows-20))
+              {
+                Rect r(int(center_holes[i].x)-20,int(center_holes[i].y)-20,40,40);
+                bounding_patch = Rect(0,0,im_gray_.cols,im_gray_.rows) & r;
+                im_objectholepatch.push_back(im_gray_(bounding_patch).clone());
+                sum_current_rectangle = 0;
+                for (int k = 0; k < 2; k++)
+                {
+                  for(int m = 0; m < surrounding_rectangle_size; m++)
+                  {
+                    if (k == 0)
+                    {
+                      sum_current_rectangle += int(im_gray_.at<unsigned char>( (center_holes[i].y-surrounding_rectangle_size/2),
+                      (center_holes[i].x+(surrounding_rectangle_size/2 - m)) ) );
+                      if (m < (surrounding_rectangle_size-2))
+                      {
+                        sum_current_rectangle += int(im_gray_.at<unsigned char>( (center_holes[i].y+(surrounding_rectangle_size/2 - m - 1)),
+                        (center_holes[i].x-surrounding_rectangle_size/2) ) );
+
+                      }
+                    } else if (k == 1)
+                    {
+                      sum_current_rectangle += int(im_gray_.at<unsigned char>( (center_holes[i].y+surrounding_rectangle_size/2),
+                      (center_holes[i].x+(surrounding_rectangle_size/2 - m)) ) );
+                      if (m < (surrounding_rectangle_size-2))
+                      {
+                        sum_current_rectangle += int(im_gray_.at<unsigned char>( (center_holes[i].y+(surrounding_rectangle_size/2 - m - 1)),
+                        (center_holes[i].x+surrounding_rectangle_size/2) ) );
+                      }
+                    }
+
+                  }
+                }
+
+              avg_current_rectangle = sum_current_rectangle / (surrounding_rectangle_size*4-4);
+              surrounding_avg_brightness_level[i] = avg_current_rectangle;
+              cout << "Avg bound rect: " << avg_current_rectangle << "\n";
+
+              }
+              // End getting objects/holes surrounding brightness
+
+              /*for (int j = 0; j < center_objects.size(); j++)
               {
                 if (center_holes[i].x < (center_objects[j].x + center_proximity) && 
                 center_holes[i].x > (center_objects[j].x - center_proximity) && 
                 center_holes[i].y < (center_objects[j].y + center_proximity) && 
                 center_holes[i].y > (center_objects[j].y - center_proximity))
                 {
+                  true_object_center.push_back(center_objects[j]);
                   // flag i -> do not draw the circle
                   objects_flag[i] = 1;
                 }
-              }
+              }*/
             }
         }
-        if (objects_flag[i] != 1) {
-            for (int j = 0; j < center_holes.size(); j++)
-            {
-              if (center_holes[i].x < (center_holes[j].x + center_proximity) && 
-              center_holes[i].x > (center_holes[j].x - center_proximity) && 
-              center_holes[i].y < (center_holes[j].y + center_proximity) && 
-              center_holes[i].y > (center_holes[j].y - center_proximity))
-              {
-                center_holes.erase(center_holes.begin() + j);
-              }
-            }
+
           // draw red circle if it is a hole
           if (radius_vect_holes[i] > 0 && radius_vect_holes[i] < 30)
           {
-            circle( image, center_holes[i], (int)radius_vect_holes[i], Scalar ( 0,0,255), 2, 8, 0 );
+            //circle( image, center_holes[i], (int)radius_vect_holes[i], Scalar ( 0,0,255), 2, 8, 0 );
             center_holes.push_back(center_holes[i]); // Fill the vector
             radius_vect_holes.push_back(radius_vect_holes[i]);
           }
+        
+
+
+      }
+  //////// End of the holes centers
+
+      
+  //////// Begin object detection with adaptive threshold based on the surroundings of object/hole
+    Scalar mean;
+    Scalar stdev;
+    meanStdDev(surrounding_avg_brightness_level,mean,stdev);
+    cout << "mean" << mean[0] << "STD" << stdev[0];
+
+    // Construct a vector with  objects/holes image patches
+    vector <float> object_threshold_vec(im_objectholepatch.size());
+    vector<Mat> im_objectholepatch_bin(im_objectholepatch.size());
+
+    vector <vector <Point> > contours_objects;
+    vector<Point> approx_objects;
+
+    for (int i = 0; i < im_objectholepatch.size(); i++)
+    {
+      object_threshold_vec[i] = object_threshold;
+      //object_threshold_vec[i] = object_threshold - (mean[0] - surrounding_avg_brightness_level[i])/2;
+      cout << "OBJ THR " << object_threshold_vec[i] << "surr avg br" << surrounding_avg_brightness_level[i] << "\n";
+      threshold(im_objectholepatch[i], im_objectholepatch_bin[i], object_threshold_vec[i], 255.0, THRESH_BINARY);
+      findContours(im_objectholepatch_bin[i], contours_objects, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE); // Find the contours in the image based on threshold
+      for (int j = 0; j < contours_objects.size(); j++)
+      {
+        approxPolyDP(Mat(contours_objects[j]), approx_objects, arcLength(Mat(contours_objects[j]), true)*0.02, true);
+        if (fabs(contourArea(contours_objects[j])) < 100 || !isContourConvex(approx_objects))
+                continue;
+        if (approx_objects.size() > 6) // Detects just circles
+        {
+          double area_objects = contourArea(contours_objects[j]);
+          Rect r_objects = boundingRect(contours_objects[j]);
+          int radius_objects = r_objects.width / 2;
+          
+          if (abs(1 - ((double)r_objects.width / r_objects.height)) <= 0.3 &&
+              abs(1 - (area_objects / (CV_PI * pow(radius_objects, 2)))) <= 0.3
+              //&& area_objects > min_contour_area && area_objects < max_contour_area
+              )
+              {
+                  objects_flag[i] = 1;
+              }
         }
       }
+
+    }
+    surrounding_avg_brightness_level.clear();
+  //////// End object detection
+
+  //////// Publish holes and objects center coordinates, output coordinates on console, and draw a circle
       camera_to_cv::points_array points_msg;
       camera_to_cv::points_array holes_points_msg;
 
-      for (int i = 0; i < center_objects.size(); i++)
-      {
-        if (working_table_limits_found == 1)
-        {
-          cout << "Object [" << i << "] coordinates -> x: " << center_objects[i].x << ", y: " << center_objects[i].y << "\n";
-          geometry_msgs::Point point;
-          point.x = center_objects[i].x;
-          point.y = center_objects[i].y;
-          point.z = 0;
-          if (point.x > 0 && point.x < 640 && point.y > 0 && point.y < 480)
-          {
-            points_msg.points.push_back(point);
-          }
-        }
-      }
+      int o = 0;
+      int h = 0;
       for (int i = 0; i < center_holes.size(); i++)
       {
-        if (working_table_limits_found == 1)
-        {
-          cout << "Hole [" << i << "] coordinates -> x: " << center_holes[i].x << ", y: " << center_holes[i].y << "\n";
+        if (objects_flag[i] != 1) {
+          cout << "Hole [" << h << "] coordinates -> x: " << center_holes[i].x << ", y: " << center_holes[i].y << "\n";
           geometry_msgs::Point point_hole;
           point_hole.x = center_holes[i].x;
           point_hole.y = center_holes[i].y;
           point_hole.z = 0;
-          if (point_hole.x > 0 && point_hole.x < 640 && point_hole.y > 0 && point_hole.y < 480)
-          {
-            holes_points_msg.points.push_back(point_hole);
-          }
+          holes_points_msg.points.push_back(point_hole);
+          circle( image, center_holes[i], (int)radius_vect_holes[i], Scalar ( 0,0,255), 2, 8, 0 ); // draw red circle around the contour
+          h++;
+        } 
+      }
+      for (int i = 0; i < center_holes.size(); i++)
+      {
+        if (objects_flag[i] != 1) {
+          cout << "Object [" << o << "] coordinates -> x: " << center_holes[i].x << ", y: " << center_holes[i].y << "\n";
+          geometry_msgs::Point point;
+          point.x = center_holes[i].x;
+          point.y = center_holes[i].y;
+          point.z = 0;
+          points_msg.points.push_back(point);
+          o++;
+          circle( image, center_holes[i], (int)radius_vect_holes[i], Scalar ( 0,255,0), 2, 8, 0 ); // draw green circle around the contour
         }
       }
-      
-      //////// End of the holes centers
 
-      
+  //////// End Publish and output
+    
+
+      //imshow("Color image", cv_ptr->image);
+      imshow(OPENCV_WINDOW, image);
+
+      //imshow(OPENCV_WINDOW, im_gray_);
+      imshow("Holes thresholding", im_bw_holes_);
       ///////// End image processing /////////
     waitKey(3);
     
@@ -405,15 +400,6 @@ public:
       object_pub.publish(points_msg);
       holes_pub.publish(holes_points_msg);
     }
-    imshow(OPENCV_WINDOW, image);
-    imshow("Object detect", im_bw_objects);
-    imshow(original_image_w, im_orig);
-    imshow("Grayscale out of blue c", im_gray);
-    namedWindow(adjusted_image, CV_WINDOW_AUTOSIZE);
-    createTrackbar("Brightness (reverse values)", adjusted_image, &brightness_level, max_brightness, ParametersChange);
-    createTrackbar("Contrast", adjusted_image, &contrast_level, max_contrast, ParametersChange);
-    createTrackbar("Gamma correction", adjusted_image, &gamma_level, 20000, ParametersChange);
-    imshow("Holes detect", im_holesdetect);
     working_table_limits_found = 0;
     table_found_pub.publish(table_found_msg);
     table_properties_pub.publish(table_properties_msg);

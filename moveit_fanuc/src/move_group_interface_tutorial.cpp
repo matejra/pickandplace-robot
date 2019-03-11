@@ -4,6 +4,7 @@
 #include <moveit_msgs/DisplayTrajectory.h>
 #include <moveit_msgs/AttachedCollisionObject.h>
 #include <moveit_msgs/CollisionObject.h>
+#include <moveit_msgs/ObjectColor.h>
 #include <moveit_visual_tools/moveit_visual_tools.h>
 #include <camera_to_cv/points_array.h>
 #include <camera_to_cv/table_properties.h>
@@ -23,6 +24,8 @@ std::vector<geometry_msgs::Point> objcoord_vec;
 std::vector<geometry_msgs::Point> holescoord_vec;
 std::vector<geometry_msgs::Point>object_absolute_position_vec;
 std::vector<geometry_msgs::Point>holes_absolute_position_vec;
+std::vector<geometry_msgs::Point>holes_absolute_position_vec_corrected;
+geometry_msgs::Point holes_absolute_position_corrected;
 geometry_msgs::Point object_absolute_position;
 geometry_msgs::Point holes_absolute_position;
 bool table_found_var = false;
@@ -36,6 +39,7 @@ float pixel_to_m_table = 836; // initialize pixel to m ratio, if table is not fo
 int pixel_to_m_object = 875; // pixel to m ratio on height of objects
 float working_table_w = 418;
 float working_table_h = 250;
+float center_proximity = 0.005;
 int optical_center_x = 227;
 int optical_center_y = 209;
 const double jump_threshold = 0.0;
@@ -47,12 +51,15 @@ float inv_sc_proj_mat[3][3] = {
      {0,     0.00116,     -0.02583},
      {0,     0,     0.84388}
     }; 
-char* robot_ip = (char*)"robottest32.000webhostapp.com/action_page.php?";
+//char* robot_ip = (char*)"robottest32.000webhostapp.com/action_page.php?";
+char* robot_ip = (char*)"192.168.1.50/KAREL/ros_cgio?";
 char* io_op = (char*)"write";
 char* io_type = (char*)"9";
 char* io_idx_open = (char*)"7";
 char* io_idx_close = (char*)"8";
 char* io_val = (char*)"1";
+std::string successstring;
+std::string responsestring;
 
 void table_found_clbk(const std_msgs::Bool::ConstPtr& found) {
     table_found_var = found->data;
@@ -70,12 +77,9 @@ void objects_centers_clbk(const camera_to_cv::points_array::ConstPtr& msg) {
     objcoord_vec.clear();
     for (int i = 0; i < (msg->points.size()); i++) 
     {
-      //std::cout << typeid(msg->points[i].x).name() << " " << typeid(objcoord_vec_x).name() << '\n';
       // add objects center points to vector
       objcoord_vec.push_back(msg->points[i]);
       num_objects = msg->points.size();
-      //std::cout << objcoord_vec_x[0] << ", size: " << objcoord_vec_x.size() << "\n";
-
     }
 }
 
@@ -85,76 +89,11 @@ void holes_centers_clbk(const camera_to_cv::points_array::ConstPtr& msg) {
     holescoord_vec.clear();
     for (int i = 0; i < (msg->points.size()); i++) 
     {
-      //std::cout << typeid(msg->points[i].x).name() << " " << typeid(holescoord_vec_x).name() << '\n';
       // add objects center points to vector
       holescoord_vec.push_back(msg->points[i]);
       num_holes = msg->points.size();
-      //std::cout << holescoord_vec_x[0] << ", size: " << holescoord_vec_x.size() << "\n";
-
     }
 }
-
-/*void openGripper(trajectory_msgs::JointTrajectory& posture)
-{
-  // BEGIN_SUB_TUTORIAL open_gripper
-  // Add both finger joints of panda robot.
-  posture.joint_names.resize(2);
-  posture.joint_names[0] = "finger_joint1";
-  posture.joint_names[1] = "finger_joint2";
-
-  // CURL command, if suceeds, proceed with opening the grip in simulation
-
-  // Set them as open, wide enough for the object to fit. 
-  posture.points.resize(1);
-  posture.points[0].positions.resize(2);
-  posture.points[0].positions[0] = 0.00;
-  posture.points[0].positions[1] = 0.00;
-  posture.points[0].time_from_start = ros::Duration(0.5);
-  // END_SUB_TUTORIAL
-  
-}
-
-void closedGripper(trajectory_msgs::JointTrajectory& posture)
-{
-  // BEGIN_SUB_TUTORIAL closed_gripper
-  // Add both finger joints of panda robot. 
-  posture.joint_names.resize(2);
-  posture.joint_names[0] = "finger_joint1";
-  posture.joint_names[1] = "finger_joint2";
-
-  // CURL command, if suceeds, proceed with closing the grip in simulation
-
-  posture.points.resize(1);
-  posture.points[0].positions.resize(2);
-  posture.points[0].positions[0] = 0.005;
-  posture.points[0].positions[1] = 0.005;
-  posture.points[0].time_from_start = ros::Duration(0.5);
-  // END_SUB_TUTORIAL
-}*/
-
-/*std::vector<double> obj_belowzero(int n_obj, std::vector<double > obj_abspos_xvec) {
-    std::vector<double> obj_belowzero_coor;
-    for (int i = 0; i < n_obj; i++)
-    {
-      if (obj_abspos_yvec[i] < 0)
-      {
-        obj_belowzero_coor.push_back(obj_abspos_yvec[i]); 
-      }
-    }
-    return obj_belowzero_coor;
-}
-
-std::vector<double> holes_abovezero(int n_obj, std::vector<double > holes_abspos_yvec) {
-    std::vector<double> holes_abspos_coor;
-    for (int i = 0; i < n_obj; i++)
-    {
-      if (holes_abspos_yvec[i] < 0)
-      {
-        obj_belowzero_coor.push_back(obj_abspos_yvec[i]); 
-      }
-    }
-    return obj_belowzero_coor;
-}*/
 
 
 
@@ -208,15 +147,9 @@ int main(int argc, char** argv)
     object_absolute_position_vec.clear();
     for (int i = 0; i < num_objects; i++)
     {
-      //object_absolute_position.x = table_x - ((working_table_h - optical_center_y)/pixel_to_m_table) - (optical_center_y-objcoord_vec[i].y)/pixel_to_m_object;
-      //object_absolute_position.y = table_y - ((working_table_w - optical_center_x)/pixel_to_m_table) - (optical_center_x-objcoord_vec[i].x)/pixel_to_m_object;
       object_absolute_position.x = camera_x+inv_sc_proj_mat[1][1]*(objcoord_vec[i].y-optical_center_y);
       object_absolute_position.y = camera_y+inv_sc_proj_mat[0][0]*(objcoord_vec[i].x-optical_center_x);
-
       object_absolute_position_vec.push_back(object_absolute_position);
-      //std::cout << "Object[" << i << "]  x: " << object_absolute_position.x << ", y: " << object_absolute_position.y << "\n";
-      //object_absolute_position_x_vec.push_back(table_x - ((working_table_h - objcoord_vec.y[i])/pixel_to_m_table) + ); //
-      //object_absolute_position_y_vec.push_back(table_y - ((working_table_w - objcoord_vec.x[i])/pixel_to_m_table) + ); //
     }
   }
 
@@ -227,22 +160,7 @@ int main(int argc, char** argv)
     {
       holes_absolute_position.x = camera_x+(holescoord_vec[i].y-optical_center_y)/pixel_to_m_table;
       holes_absolute_position.y = camera_y+(holescoord_vec[i].x-optical_center_x)/pixel_to_m_table + 0.002;
-      
-      //holes_absolute_position.x = table_x - ((working_table_h - optical_center_y)/pixel_to_m_table) - (optical_center_y-holescoord_vec[i].y)/pixel_to_m_table;
-      //holes_absolute_position.y = table_y - ((working_table_w - optical_center_x)/pixel_to_m_table) - (optical_center_x-holescoord_vec[i].x)/pixel_to_m_table; // if y >opt centery: - 0.0215 * (optical_center_x-holescoord_vec[i].x)/pixel_to_m_table
-      /*if (holescoord_vec[i].x > optical_center_x) // shadow correction
-      {
-        if (holes_absolute_position.y > 0.2)
-        {
-          holes_absolute_position.y += - 0.017 * (optical_center_x-holescoord_vec[i].x)/pixel_to_m_table;
-        } else {
-          holes_absolute_position.y += - 0.035 * (optical_center_x-holescoord_vec[i].x)/pixel_to_m_table;
-        }
-      }*/
       holes_absolute_position_vec.push_back(holes_absolute_position);
-      //std::cout << "Hole[" << i << "]  x: " << holes_absolute_position.x << ", y: " << holes_absolute_position.y << "\n";
-      //object_absolute_position_x_vec.push_back(table_x - ((working_table_h - objcoord_vec.y[i])/pixel_to_m_table) + ); //
-      //object_absolute_position_y_vec.push_back(table_y - ((working_table_w - objcoord_vec.x[i])/pixel_to_m_table) + ); //
     }
     flag_firsttime = 1;
   }
@@ -255,6 +173,36 @@ int main(int argc, char** argv)
     }
   };
 
+
+
+  // correction of coordinates
+  holes_absolute_position_vec_corrected.clear();
+  float holes_absolute_position_vec_coordinates_x[] = {0.326, 0.3536, 0.3800, 0.3800, 0.4060, 0.4060, 0.4335, 0.4335, 0.4655, 0.4860};
+  float holes_absolute_position_vec_coordinates_y[] = {0.0714, 0.1191, 0.0714, 0.164, 0.1191, 0.2115, 0.0714, 0.164, 0.1191, 0.0714};
+  for (int i = 0; i < num_holes; i++)
+  {
+    holes_absolute_position_corrected.x = holes_absolute_position_vec_coordinates_x[i];
+    holes_absolute_position_corrected.y = holes_absolute_position_vec_coordinates_y[i];
+    holes_absolute_position_vec_corrected.push_back(holes_absolute_position_corrected);
+  }
+
+  for (int i = 0; i < num_holes; i++) 
+  {
+    for (int j = 0; j < holes_absolute_position_vec_corrected.size(); j++)
+    {
+      if (holes_absolute_position_vec[i].x  < (holes_absolute_position_vec_corrected[j].x + center_proximity) &&
+      holes_absolute_position_vec[i].x  > (holes_absolute_position_vec_corrected[j].x - center_proximity)) 
+      {
+        holes_absolute_position_vec[i].x = holes_absolute_position_vec_corrected[j].x;
+      }
+
+      if (holes_absolute_position_vec[i].y  < (holes_absolute_position_vec_corrected[j].y + center_proximity) &&
+      holes_absolute_position_vec[i].y  > (holes_absolute_position_vec_corrected[j].y - center_proximity)) 
+      {
+        holes_absolute_position_vec[i].y = holes_absolute_position_vec_corrected[j].y;
+      }
+    }
+  }
   std::sort(object_absolute_position_vec.begin(), object_absolute_position_vec.end(), is_greater());
   std::sort(holes_absolute_position_vec.begin(), holes_absolute_position_vec.end(), is_greater());
 
@@ -270,7 +218,7 @@ int main(int argc, char** argv)
 
   // We will use the :planning_scene_interface:`PlanningSceneInterface`
   // class to add and remove collision objects in our "virtual world" scene
-  //moveit::planning_interface::PlanningSceneInterface planning_scene_interface;
+  moveit::planning_interface::PlanningSceneInterface planning_scene_interface;
 
   // Raw pointers are frequently used to refer to the planning group for improved performance.
   const robot_state::JointModelGroup* joint_model_group =
@@ -301,6 +249,165 @@ int main(int argc, char** argv)
   // ^^^^^^^^^^^^^^^^^^^^^^^^^
 
   visual_tools.prompt("Press 'next' in the RvizVisualToolsGui window to start the demo");
+  //////////////////////////////// start collision defining ///////////////////////////////////
+
+  ///////////// RIGHT PART OF THE PROTECTING CASE AS COLLISION OBJECT ROS MESSAGE
+  moveit_msgs::CollisionObject collision_object_right;
+  collision_object_right.header.frame_id = move_group.getPlanningFrame();
+  collision_object_right.id = "rightpart";
+
+  // Define a left-right box to add to the world.
+  shape_msgs::SolidPrimitive primitive_leftright;
+  primitive_leftright.type = primitive_leftright.BOX;
+  primitive_leftright.dimensions.resize(3);
+  primitive_leftright.dimensions[0] = 1.1;
+  primitive_leftright.dimensions[1] = 0.02;
+  primitive_leftright.dimensions[2] = 0.8;
+
+  // Define a pose for the box (specified relative to frame_id)
+  geometry_msgs::Pose box_pose_right;
+  box_pose_right.orientation.w = 1.0;
+  box_pose_right.position.x = 0.2;
+  box_pose_right.position.y = -0.29;
+  box_pose_right.position.z = 0.39;
+
+  collision_object_right.primitives.push_back(primitive_leftright);
+  collision_object_right.primitive_poses.push_back(box_pose_right);
+  collision_object_right.operation = collision_object_right.ADD;
+  ///////////// END RIGHT PART
+
+  ///////////// LEFT PART OF THE PROTECTING CASE AS COLLISION OBJECT ROS MESSAGE
+  moveit_msgs::CollisionObject collision_object_left;
+  collision_object_left.header.frame_id = move_group.getPlanningFrame();
+  collision_object_left.id = "leftpart";
+
+  // Define a pose for the box (specified relative to frame_id)
+  geometry_msgs::Pose box_pose_left;
+  box_pose_left.orientation.w = 1.0;
+  box_pose_left.position.x = 0.2;
+  box_pose_left.position.y = 0.29;
+  box_pose_left.position.z = 0.39;
+
+  collision_object_left.primitives.push_back(primitive_leftright);
+  collision_object_left.primitive_poses.push_back(box_pose_left);
+  collision_object_left.operation = collision_object_left.ADD;
+  ///////////// END LEFT PART
+
+  ///////////// TOP PART OF THE PROTECTING CASE AS COLLISION OBJECT ROS MESSAGE
+  moveit_msgs::CollisionObject collision_object_top;
+  collision_object_top.header.frame_id = move_group.getPlanningFrame();
+  collision_object_top.id = "toppart";
+
+  // Define a box to add to the world.
+  shape_msgs::SolidPrimitive primitive_topbottom;
+  primitive_topbottom.type = primitive_topbottom.BOX;
+  primitive_topbottom.dimensions.resize(3);
+  primitive_topbottom.dimensions[0] = 1.1;
+  primitive_topbottom.dimensions[1] = 0.60;
+  primitive_topbottom.dimensions[2] = 0.02;
+
+  // Define a pose for the box (specified relative to frame_id)
+  geometry_msgs::Pose box_pose_top;
+  box_pose_top.orientation.w = 1.0;
+  box_pose_top.position.x = 0.2;
+  box_pose_top.position.y = 0;
+  box_pose_top.position.z = 0.8;
+
+  collision_object_top.primitives.push_back(primitive_topbottom);
+  collision_object_top.primitive_poses.push_back(box_pose_top);
+  collision_object_top.operation = collision_object_top.ADD;
+  ///////////// END TOP PART
+
+  ///////////// BOTTOM PART OF THE PROTECTING CASE AS COLLISION OBJECT ROS MESSAGE
+  moveit_msgs::CollisionObject collision_object_bottom;
+  collision_object_bottom.header.frame_id = move_group.getPlanningFrame();
+  collision_object_bottom.id = "bottompart";
+
+  // Define a pose for the box (specified relative to frame_id)
+  geometry_msgs::Pose box_pose_bottom;
+  box_pose_bottom.orientation.w = 1.0;
+  box_pose_bottom.position.x = 0.2;
+  box_pose_bottom.position.y = 0;
+  box_pose_bottom.position.z = -0.02;
+
+  collision_object_bottom.primitives.push_back(primitive_topbottom);
+  collision_object_bottom.primitive_poses.push_back(box_pose_bottom);
+  collision_object_bottom.operation = collision_object_bottom.ADD;
+  ///////////// END BOTTOM PART
+
+  ///////////// REAR PART OF THE PROTECTING CASE AS COLLISION OBJECT ROS MESSAGE
+  moveit_msgs::CollisionObject collision_object_rear;
+  collision_object_rear.header.frame_id = move_group.getPlanningFrame();
+
+  // The id of the object is used to identify it.
+  collision_object_rear.id = "rearpart";
+
+  // Define a box to add to the world.
+  shape_msgs::SolidPrimitive primitive_rearfront;
+  primitive_rearfront.type = primitive_rearfront.BOX;
+  primitive_rearfront.dimensions.resize(3);
+  primitive_rearfront.dimensions[0] = 0.02;
+  primitive_rearfront.dimensions[1] = 0.60;
+  primitive_rearfront.dimensions[2] = 0.81;
+
+  // Define a pose for the box (specified relative to frame_id)
+  geometry_msgs::Pose box_pose_rear;
+  box_pose_rear.orientation.w = 1.0;
+  box_pose_rear.position.x = -0.36;
+  box_pose_rear.position.y = 0;
+  box_pose_rear.position.z = 0.4;
+
+  collision_object_rear.primitives.push_back(primitive_rearfront);
+  collision_object_rear.primitive_poses.push_back(box_pose_rear);
+  collision_object_rear.operation = collision_object_rear.ADD;
+  ///////////// END REAR PART
+
+  ///////////// FRONT PART OF THE PROTECTING CASE AS COLLISION OBJECT ROS MESSAGE
+  moveit_msgs::CollisionObject collision_object_front;
+  collision_object_front.header.frame_id = move_group.getPlanningFrame();
+
+  // The id of the object is used to identify it.
+  collision_object_front.id = "frontpart";
+
+  // Define a pose for the box (specified relative to frame_id)
+  geometry_msgs::Pose box_pose_front;
+  box_pose_front.orientation.w = 1.0;
+  box_pose_front.position.x = 0.74;
+  box_pose_front.position.y = 0;
+  box_pose_front.position.z = 0.4;
+
+  collision_object_front.primitives.push_back(primitive_rearfront);
+  collision_object_front.primitive_poses.push_back(box_pose_front);
+  collision_object_front.operation = collision_object_front.ADD;
+  ///////////// END FRONT PART
+
+  std::vector<moveit_msgs::CollisionObject> collision_objects;
+  collision_objects.push_back(collision_object_right);
+  collision_objects.push_back(collision_object_left);
+  collision_objects.push_back(collision_object_top);
+  collision_objects.push_back(collision_object_bottom);
+  collision_objects.push_back(collision_object_rear);
+  //collision_objects.push_back(collision_object_front);
+
+  std::vector<moveit_msgs::ObjectColor> collision_colors;
+  for (int i = 0; i < collision_objects.size(); i++)
+  {
+    collision_colors.emplace_back();
+    collision_colors.back().color.a= 0.2;
+    collision_colors.back().color.r= 0;
+    collision_colors.back().color.g= 1;
+    collision_colors.back().color.b= 0;
+  }
+
+  // Now, let's add the collision object into the world
+  ROS_INFO_NAMED("tutorial", "Add an object into the world");
+  planning_scene_interface.applyCollisionObjects(collision_objects, collision_colors);
+  // Show text in RViz of status
+  visual_tools.publishText(text_pose, "Add object", rvt::WHITE, rvt::XLARGE);
+  visual_tools.trigger();
+
+  // Wait for MoveGroup to recieve and process the collision object message
+  visual_tools.prompt("Press 'next' in the RvizVisualToolsGui window to once the collision object appears in RViz");
 
   moveit::planning_interface::MoveGroupInterface::Plan my_plan;
 
@@ -389,7 +496,7 @@ int main(int argc, char** argv)
     std::vector<geometry_msgs::Pose> waypoints_down_hole;
 
     while (object_absolute_position_vec[j].y > 0) {
-      j++;
+      j++; // go forward through object until you get an object that has y below zero
     }
     if (j >= object_absolute_position_vec.size())
     {
@@ -420,6 +527,24 @@ int main(int argc, char** argv)
     visual_tools.trigger();
     visual_tools.prompt("Press 'next' in the RvizVisualToolsGui window to continue the demo");
     move_group.execute(plan);
+    /*sleep(1.0);
+    geometry_msgs::Pose executed_pose_pickplace = move_group.getCurrentPose().pose;
+    if (target_pose_pickplace.position.x > (executed_pose_pickplace.position.x - 0.005) && target_pose_pickplace.position.x < (executed_pose_pickplace.position.x + 0.005))
+    {}
+    else {
+        ROS_INFO_NAMED("tutorial", "Object locating pose not reached!");
+        break;
+    }*/
+
+    // check if execution is correct!
+    success = (move_group.plan(plan) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
+    if (success)
+    {
+      ROS_INFO_NAMED("tutorial", "Plan suceeded");
+    } else {
+      ROS_INFO_NAMED("tutorial", "Plan FAILED");
+      return 1;
+    }
 
     target_pose_pickplace.position.z = 0.165;
     waypoints_down_obj.push_back(target_pose_pickplace); 
@@ -444,34 +569,28 @@ int main(int argc, char** argv)
     visual_tools.prompt("Press 'next' in the RvizVisualToolsGui window to continue the demo");
     move_group.execute(plan_down);
 
-    /*CURL *curl;
-    CURLcode res;
-
-    curl = curl_easy_init();
-    if(curl) 
+    // check if execution is correct!
+    success = (move_group.plan(plan_down) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
+    if (success)
     {
-      curl_easy_setopt(curl, CURLOPT_URL, "http://robottest32.000webhostapp.com/action_page.php?io_op=write&io_type=9&io_idx=8&io_val=1"); // CLOSE gripper
-      //curl_easy_setopt(curl, CURLOPT_URL, "http://192.168.1.50/KAREL/ros_cgio?io_op=write&io_type=9&io_idx=8&io_val=1"); // CLOSE gripper
-        // Perform the request, res will get the return code  
-      res = curl_easy_perform(curl);
-      // Check for errors 
-      if(res != CURLE_OK)
-        fprintf(stderr, "curl_easy_perform() failed: %s\n",
-                curl_easy_strerror(res));
-  
-      // always cleanup 
-      curl_easy_cleanup(curl);
-    }*/
-
+      ROS_INFO_NAMED("tutorial", "Plan suceeded");
+    } else {
+      ROS_INFO_NAMED("tutorial", "Plan FAILED");
+      return 1;
+    }
     srv.request.robot_ip = robot_ip;
     srv.request.io_op = io_op;
     srv.request.io_type = io_type;
     srv.request.io_idx = io_idx_close;
     srv.request.io_val = io_val;
-    
+
+    successstring = "1";
+
     if (client.call(srv))
     {
-      if (srv.response.success.c_str() != "1")
+      responsestring = srv.response.success.c_str();
+      //std::cout << "response" << srv.response.success << "\n";
+      if (&responsestring[0] != successstring)
       {
         ROS_ERROR("Failed to open/close the gripper");
         return 1;   
@@ -509,6 +628,17 @@ int main(int argc, char** argv)
     visual_tools.prompt("Press 'next' in the RvizVisualToolsGui window to continue the demo");
     move_group.execute(plan_up);
 
+        // check if execution is correct!
+    success = (move_group.plan(plan_up) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
+    if (success)
+    {
+      ROS_INFO_NAMED("tutorial", "Plan suceeded");
+    } else {
+      ROS_INFO_NAMED("tutorial", "Plan FAILED");
+      return 1;
+    }
+
+
     while (holes_absolute_position_vec[k].y < 0) { // add error if there is no hole that exists
       k++;
     }
@@ -538,9 +668,20 @@ int main(int argc, char** argv)
     visual_tools.prompt("Press 'next' in the RvizVisualToolsGui window to continue the demo");
 
     move_group.execute(plan_2);
-    std::cout << "k: " << k << " j: " << j << " holesabsvecsize: " << holes_absolute_position_vec.size() << " objabsvecsize: " << object_absolute_position_vec.size() << "\n";
+
+    // check if execution is correct!
+    success = (move_group.plan(plan_2) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
+    if (success)
+    {
+      ROS_INFO_NAMED("tutorial", "Plan suceeded");
+    } else {
+      ROS_INFO_NAMED("tutorial", "Plan FAILED");
+      return 1;
+    }
+
+    std::cout << "numobj: " << num_objects << " j: " << j << " holesabsvecsize: " << holes_absolute_position_vec.size() << " objabsvecsize: " << object_absolute_position_vec.size() << "\n";
     
-    target_pose_pickplace.position.z = 0.182;
+    target_pose_pickplace.position.z = 0.171;
     waypoints_down_hole.push_back(target_pose_pickplace); 
     target_pose_pickplace.position.y = holes_absolute_position_vec[k].y; 
     waypoints_down_hole.push_back(target_pose_pickplace); 
@@ -561,36 +702,31 @@ int main(int argc, char** argv)
     visual_tools.trigger();
     visual_tools.prompt("Press 'next' in the RvizVisualToolsGui window to continue the demo");
     move_group.execute(plan_down_hole);
-    sleep(1.0);
     
-    /*CURL *curl_2;
-    CURLcode res_2;
-
-    curl_2 = curl_easy_init();
-    if(curl_2) 
+        // check if execution is correct!
+    success = (move_group.plan(plan_down_hole) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
+    if (success)
     {
-      curl_easy_setopt(curl_2, CURLOPT_URL, "http://robottest32.000webhostapp.com/action_page.php?io_op=write&io_type=9&io_idx=7&io_val=1"); // OPEN gripper
-      //curl_easy_setopt(curl_2, CURLOPT_URL, "http://192.168.1.50/KAREL/ros_cgio?io_op=write&io_type=9&io_idx=7&io_val=1"); // OPEN gripper
-      // Perform the request, res will get the return code  
-      res_2 = curl_easy_perform(curl_2);
-      // Check for errors 
-      if(res_2 != CURLE_OK)
-        fprintf(stderr, "curl_easy_perform() failed: %s\n",
-                curl_easy_strerror(res_2));
-  
-      // always cleanup 
-      curl_easy_cleanup(curl_2);
-    }*/
+      ROS_INFO_NAMED("tutorial", "Plan suceeded");
+    } else {
+      ROS_INFO_NAMED("tutorial", "Plan FAILED");
+      return 1;
+    }
 
-    srv.request.robot_ip = robot_ip;
-    srv.request.io_op = io_op;
-    srv.request.io_type = io_type;
+    sleep(1.0);
+
     srv.request.io_idx = io_idx_open;
-    srv.request.io_val = io_val;
 
     if (client.call(srv))
     {
-      ROS_INFO("Response: %s", srv.response.success.c_str());
+      if (&responsestring[0] != successstring)
+      {
+        ROS_ERROR("Failed to open/close the gripper");
+        return 1;   
+        // SLEEP 3 SEC, TRY AGAIN
+      } else {
+        ROS_INFO("Opening/closing the gripper SUCEEDED");
+      }    
     }
     else
     {
@@ -630,7 +766,88 @@ int main(int argc, char** argv)
       visual_tools.prompt("Press 'next' in the RvizVisualToolsGui window to continue the demo");
       move_group.setJointValueTarget(joint_group_positions_home);
       move_group.move();
+
+      /*if (objcoord_vec.size() != 0 && table_found_var == true) 
+      {
+        object_absolute_position_vec.clear();
+        for (int i = 0; i < num_objects; i++)
+        {
+          object_absolute_position.x = camera_x+inv_sc_proj_mat[1][1]*(objcoord_vec[i].y-optical_center_y);
+          object_absolute_position.y = camera_y+inv_sc_proj_mat[0][0]*(objcoord_vec[i].x-optical_center_x);
+          object_absolute_position_vec.push_back(object_absolute_position);
+        }
+        j = 0;
+        while (object_absolute_position_vec[j].y > 0) {
+          j++;
+        }
+        if (j >= object_absolute_position_vec.size())
+        {
+          current_state = move_group.getCurrentState();
+          ROS_INFO_NAMED("tutorial", "All objects have positive y coordinate. Aborting.");
+          current_state->copyJointGroupPositions(joint_model_group, joint_group_positions_home);
+          joint_group_positions_home[0] = 0;
+          joint_group_positions_home[1] = -0.3879;
+          joint_group_positions_home[2] = -0.60349;
+          joint_group_positions_home[3] = 0;
+          joint_group_positions_home[4] = -1.35499;
+          joint_group_positions_home[5] = 0;  // radians
+          move_group.setJointValueTarget(joint_group_positions_home);
+
+          success = (move_group.plan(my_plan) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
+          if (success)
+          {
+            ROS_INFO_NAMED("tutorial", "Visualizing robot going to start position");
+          } else {
+            ROS_INFO_NAMED("tutorial", "Visualizing robot going to start position FAILED");
+          }
+          break;
+        }
+      }
+        
+      if (holescoord_vec.size() != 0 && table_found_var == true) 
+      {
+        holes_absolute_position_vec.clear();
+        for (int i = 0; i < num_holes; i++)
+        {
+          holes_absolute_position.x = camera_x+(holescoord_vec[i].y-optical_center_y)/pixel_to_m_table;
+          holes_absolute_position.y = camera_y+(holescoord_vec[i].x-optical_center_x)/pixel_to_m_table + 0.002;
+          holes_absolute_position_vec.push_back(holes_absolute_position);
+        }
+      }
+
+      // correction of coordinates
+      holes_absolute_position_vec_corrected.clear();
+      float holes_absolute_position_vec_coordinates_x[] = {0.326, 0.3536, 0.3800, 0.3800, 0.4060, 0.4060, 0.4335, 0.4335, 0.4655, 0.4860};
+      float holes_absolute_position_vec_coordinates_y[] = {0.0714, 0.1191, 0.0714, 0.164, 0.1191, 0.2115, 0.0714, 0.164, 0.1191, 0.0714};
+      for (int i = 0; i < num_holes; i++)
+      {
+        holes_absolute_position_corrected.x = holes_absolute_position_vec_coordinates_x[i];
+        holes_absolute_position_corrected.y = holes_absolute_position_vec_coordinates_y[i];
+        holes_absolute_position_vec_corrected.push_back(holes_absolute_position_corrected);
+      }
+
+      for (int i = 0; i < num_holes; i++) 
+      {
+        for (int j = 0; j < holes_absolute_position_vec_corrected.size(); j++)
+        {
+          if (holes_absolute_position_vec[i].x  < (holes_absolute_position_vec_corrected[j].x + center_proximity) &&
+          holes_absolute_position_vec[i].x  > (holes_absolute_position_vec_corrected[j].x - center_proximity)) 
+          {
+            holes_absolute_position_vec[i].x = holes_absolute_position_vec_corrected[j].x;
+          }
+
+          if (holes_absolute_position_vec[i].y  < (holes_absolute_position_vec_corrected[j].y + center_proximity) &&
+          holes_absolute_position_vec[i].y  > (holes_absolute_position_vec_corrected[j].y - center_proximity)) 
+          {
+            holes_absolute_position_vec[i].y = holes_absolute_position_vec_corrected[j].y;
+          }
+        }
+      }*/
+
     }
+    // check if all objects are on + coordinate
+    // if not repeat the program
+
   }
   //////////////////////////////////////////////
   

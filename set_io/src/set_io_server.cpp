@@ -9,7 +9,7 @@
 
 using namespace std;
 string robot_ip, final_url, io_op, io_type, io_idx, io_val;
-char* = (char*) response_info;
+string response_info;
 
 std::vector<std::string> explode(std::string const & s, char delim)
 {

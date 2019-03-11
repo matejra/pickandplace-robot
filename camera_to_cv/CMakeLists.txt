@@ -28,4 +28,6 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
 )
 add_executable(camera_to_cv_node src/image_converter.cpp)
+add_executable(camera_to_cv_node_old src/image_converter_old.cpp)
 target_link_libraries(camera_to_cv_node ${OpenCV_LIBS} ${catkin_LIBRARIES})
+target_link_libraries(camera_to_cv_node_old ${OpenCV_LIBS} ${catkin_LIBRARIES})

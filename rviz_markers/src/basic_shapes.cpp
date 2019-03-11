@@ -18,14 +18,14 @@ float working_table_h = 250;
 // todo: change constants constants of camera im. size to published camera im. size 
 float camera_w = 640;
 float camera_h = 480;
-float pixel_to_m_table = 833; // initialize pixel to m ratio, if table is not found. 833 px = 1m
-float pixel_to_m_object = 867; 
+float pixel_to_m_table = 836; // initialize pixel to m ratio, if table is not found. 833 px = 1m
+float pixel_to_m_object = 862; 
 int num_old_objects = 0;
 int optical_center_x = 228;
 int optical_center_y = 211;
 float inv_sc_proj_mat[3][3] = {
-     {0.0011642,     0,     -0.34389},
-     {0,     0.00115,     -0.02583},
+     {0.00116,     0,     -0.34389},
+     {0,     0.00116,     -0.02583},
      {0,     0,     0.84388}
     }; 
 
@@ -35,21 +35,18 @@ bool table_found_var = false;
 int num_objects = 0;
 
 void objects_centers_clbk(const camera_to_cv::points_array::ConstPtr& msg) {
-    //ROS_INFO("first point: x=%.2f, y=%.2f", msg->points[0].x, msg->points[0].y);
     // clear vector of objects
     points_vec_x.clear();
     points_vec_y.clear();
     for (int i = 0; i < (msg->points.size()); i++) 
     {
-      //std::cout << typeid(msg->points[i].x).name() << " " << typeid(points_vec_x).name() << '\n';
       // add objects center points to vector
       points_vec_x.push_back(msg->points[i].x);
       points_vec_y.push_back(msg->points[i].y);
       num_objects = msg->points.size();
-      //std::cout << points_vec_x[0] << ", size: " << points_vec_x.size() << "\n";
-
     }
 }
+
 void table_found_clbk(const std_msgs::Bool::ConstPtr& found) {
     table_found_var = found->data;
 }
@@ -67,9 +64,9 @@ int main( int argc, char** argv )
   ros::Rate r(1);
   ros::Publisher marker_pub = n.advertise<visualization_msgs::MarkerArray>("visualization_marker_array", 1);
   ros::Publisher table_pub = n.advertise<visualization_msgs::Marker>("visualization_marker_table", 1);
-  ros::Subscriber sub = n.subscribe("object_chatter", 1000, objects_centers_clbk);
-  ros::Subscriber sub_table_found = n.subscribe ("table_found", 1000, table_found_clbk); 
-  ros::Subscriber sub_table_properties = n.subscribe ("table_properties_chatter", 1000, table_properties_clbk);
+  ros::Subscriber sub = n.subscribe("object_chatter", 1, objects_centers_clbk);
+  ros::Subscriber sub_table_found = n.subscribe ("table_found", 1, table_found_clbk); 
+  ros::Subscriber sub_table_properties = n.subscribe ("table_properties_chatter", 1, table_properties_clbk);
 
   // Set our initial shape type to be a cube
   uint32_t shape = visualization_msgs::Marker::CYLINDER;
@@ -113,8 +110,6 @@ int main( int argc, char** argv )
       marker_array.markers.push_back(marker);
     }*/
 
-    
-
     if (points_vec_x.size() != 0 && table_found_var == true) 
     {
       for (int j = 0; j < num_old_objects; j++) // delete markers from previous iteration
@@ -140,23 +135,8 @@ int main( int argc, char** argv )
         // Set the marker action.  Options are ADD, DELETE, and new in ROS Indigo: 3 (DELETEALL)
 
         marker.action = visualization_msgs::Marker::ADD;
-        // če je miza najdena je referenca spodnji desni rob mize
-        // če ni najdena je referenca center kamere
-
-          /*if (table_found_var == true) {*/
-            // Set the pose of the marker.  This is a full 6DOF pose relative to the frame/time specified in the header
-            //marker.pose.position.x = table_x - ((working_table_h - optical_center_y)/pixel_to_m_table) - (optical_center_y-points_vec_y[i])/pixel_to_m_object; //
-            //marker.pose.position.y = table_y - ((working_table_w - optical_center_x)/pixel_to_m_table) - (optical_center_x-points_vec_x[i])/pixel_to_m_object; //
-            
-            //marker.pose.position.x = camera_x + (points_vec_y[i] - optical_center_y)/867; // 718.7*0.84
-            //marker.pose.position.y = camera_y + (points_vec_x[i] - optical_center_x)/867;
-            marker.pose.position.x=camera_x+inv_sc_proj_mat[1][1]*(points_vec_y[i]-optical_center_y);
-            marker.pose.position.y=camera_y+inv_sc_proj_mat[0][0]*(points_vec_x[i]-optical_center_x);
-          /*} else {
-            marker.pose.position.x = camera_x - ((camera_h/2 - points_vec_y[i])/pixel_to_m);
-            marker.pose.position.y = camera_y - ((camera_w/2 - points_vec_x[i])/pixel_to_m);
-          }*/
-        
+        marker.pose.position.x=camera_x+inv_sc_proj_mat[1][1]*(points_vec_y[i]-optical_center_y);
+        marker.pose.position.y=camera_y+inv_sc_proj_mat[0][0]*(points_vec_x[i]-optical_center_x);
 
         marker.pose.position.z = 0.02;
         marker.pose.orientation.x = 0.0;
@@ -221,7 +201,7 @@ int main( int argc, char** argv )
     marker_pub.publish(marker_array);
     //table_pub.publish(table_marker);
     ros::spinOnce();
-    //r.sleep();
+    r.sleep();
 
     }
    

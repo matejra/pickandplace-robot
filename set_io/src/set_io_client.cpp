@@ -1,6 +1,10 @@
 #include "ros/ros.h"
 #include "set_io/set_io.h"
+#include <string>
 
+
+std::string responsestring;
+std::string successstring = "1";
 int main(int argc, char **argv)
 {
   ros::init(argc, argv, "set_io_client");
@@ -22,6 +26,14 @@ int main(int argc, char **argv)
   if (client.call(srv))
   {
     ROS_INFO("Response: %s", srv.response.success.c_str());
+    responsestring = srv.response.success.c_str();
+    if (&responsestring[0] != successstring)
+    {
+      std::cout << "not1";
+      std::cout << &responsestring[0];
+    } else {
+      std::cout << "suceed";
+    }
   }
   else
   {
