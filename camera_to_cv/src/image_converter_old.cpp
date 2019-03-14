@@ -36,6 +36,7 @@ Rect working_table, bounding_patch;
 Mat im_working_table_gray, image, im_orig, im_adjust, im_holesdetect, im_objectdetect, im_gray, im_bw_canny, im_gray_edges, im_bw_holes_;
 Mat im_objects_redthr, im_objects_greenthr, im_objects_allchanels, im_objects_splitedchannels[3], im_bw_objects_fromred, im_bw_objects_fromgreen;
 Mat channel[3];
+Mat HSV, frame_threshold;
 
 // Variables for image adjusting - to find the optimal values for current lightning
 int brightness_level = 0;
@@ -43,9 +44,11 @@ int max_brightness = 3000;
 int contrast_level = 0;
 int max_contrast = 100;
 int gamma_level = 1;
-double gamma_=0;
+double gamma_ = 0;
 static const std::string original_image_w = "Original image"; // pointer initializes original_image_w to the unnamed array's first element
 static const std::string adjusted_image = "Adjusted image";
+const String window_detection_name = "Object Detection_HSV";
+
 
 // Final values of contrast, brightness and gamma for object/hole detection
 double gamma_hole = 0;
@@ -54,6 +57,10 @@ int contrast_hole = 7;
 double gamma_object = 0;
 int brightness_object = -1800;
 int contrast_object = 8;
+const int max_value_H = 360/2;
+const int max_value = 255;
+int low_H = 0, low_S = 0, low_V = 0;
+int high_H = max_value_H, high_S = max_value, high_V = max_value;
 
 // Callback function for parameters contrast, brightness, gamma change
 void ParametersChange(int, void*) 
@@ -69,6 +76,37 @@ void ParametersChange(int, void*)
         }
     }
   imshow(adjusted_image, im_adjust);
+}
+
+static void on_low_H_thresh_trackbar(int, void *)
+{
+    low_H = min(high_H-1, low_H);
+    setTrackbarPos("Low H", window_detection_name, low_H);
+}
+static void on_high_H_thresh_trackbar(int, void *)
+{
+    high_H = max(high_H, low_H+1);
+    setTrackbarPos("High H", window_detection_name, high_H);
+}
+static void on_low_S_thresh_trackbar(int, void *)
+{
+    low_S = min(high_S-1, low_S);
+    setTrackbarPos("Low S", window_detection_name, low_S);
+}
+static void on_high_S_thresh_trackbar(int, void *)
+{
+    high_S = max(high_S, low_S+1);
+    setTrackbarPos("High S", window_detection_name, high_S);
+}
+static void on_low_V_thresh_trackbar(int, void *)
+{
+    low_V = min(high_V-1, low_V);
+    setTrackbarPos("Low V", window_detection_name, low_V);
+}
+static void on_high_V_thresh_trackbar(int, void *)
+{
+    high_V = max(high_V, low_V+1);
+    setTrackbarPos("High V", window_detection_name, high_V);
 }
 
 // Function for contour type
@@ -126,7 +164,8 @@ int main(int argc, char** argv)
       im_orig = image;
       split(image, channel);
       cvtColor(image, im_gray, COLOR_BGR2GRAY);
-      Canny(im_gray, im_bw_canny, 1000, 5000,5); // Canny detector is used for table finding
+
+      Canny(im_gray, im_bw_canny, 1000, 5000, 5); // Canny detector is used for table finding
       im_gray = channel[0]; // Gray image out of blue channel (to improve contrast)
       GaussianBlur( im_bw_canny, im_bw_canny, Size( 3, 3 ), 1.5, 1.5 );
       imshow("canny table detection", im_bw_canny);
@@ -224,6 +263,56 @@ int main(int argc, char** argv)
         im_gray_ = im_gray;
         image = image.clone();
       }
+
+      int histSize = 256;
+      float range[] = { 0, 256 } ;
+      const float* histRange = { range };
+      bool uniform = true; bool accumulate = false;
+      Mat b_hist, g_hist, r_hist;
+      vector<Mat> bgr_planes;
+      split( image, bgr_planes );
+      /// Compute the histograms:
+      calcHist( &bgr_planes[0], 1, 0, Mat(), b_hist, 1, &histSize, &histRange, uniform, accumulate );
+      calcHist( &bgr_planes[1], 1, 0, Mat(), g_hist, 1, &histSize, &histRange, uniform, accumulate );
+      calcHist( &bgr_planes[2], 1, 0, Mat(), r_hist, 1, &histSize, &histRange, uniform, accumulate );
+      int hist_w = 256; int hist_h = 400;
+      int bin_w = cvRound( (double) hist_w/histSize );
+
+      Mat histImage( hist_h, hist_w, CV_8UC3, Scalar( 0,0,0) );
+
+      /// Normalize the result to [ 0, histImage.rows ]
+      normalize(b_hist, b_hist, 0, histImage.rows, NORM_MINMAX, -1, Mat() );
+      normalize(g_hist, g_hist, 0, histImage.rows, NORM_MINMAX, -1, Mat() );
+      normalize(r_hist, r_hist, 0, histImage.rows, NORM_MINMAX, -1, Mat() );
+      
+      double maxVal=0;
+      Point maxind;
+      minMaxLoc(r_hist, 0, &maxVal, 0, &maxind);
+      cout << "maxval:" << maxVal << "maxind " << maxind.y;
+
+      /// Draw for each channel
+      for( int i = 1; i < histSize; i++ )
+      {
+          line( histImage, Point( bin_w*(i-1), hist_h - cvRound(b_hist.at<float>(i-1)) ) ,
+                          Point( bin_w*(i), hist_h - cvRound(b_hist.at<float>(i)) ),
+                          Scalar( 255, 0, 0), 2, 8, 0  );
+          line( histImage, Point( bin_w*(i-1), hist_h - cvRound(g_hist.at<float>(i-1)) ) ,
+                          Point( bin_w*(i), hist_h - cvRound(g_hist.at<float>(i)) ),
+                          Scalar( 0, 255, 0), 2, 8, 0  );
+          line( histImage, Point( bin_w*(i-1), hist_h - cvRound(r_hist.at<float>(i-1)) ) ,
+                          Point( bin_w*(i), hist_h - cvRound(r_hist.at<float>(i)) ),
+                          Scalar( 0, 0, 255), 2, 8, 0  );
+      }
+
+      /// Display
+      namedWindow("calcHist Demo", CV_WINDOW_AUTOSIZE );
+      imshow("calcHist Demo", histImage );
+
+      cvtColor(image, HSV, COLOR_BGR2HSV);
+      // Detect the object based on HSV Range Values
+      inRange(HSV, Scalar(low_H, low_S, low_V), Scalar(high_H, high_S, high_V), frame_threshold);
+      // Show the frames
+      imshow(window_detection_name, frame_threshold);
       
       /*im_objectdetect = Mat::zeros( im_gray_.size(), im_gray_.type() );
       for( int y = 0; y < im_gray_.rows; y++ ) {
@@ -247,6 +336,13 @@ int main(int argc, char** argv)
       im_objects_redthr = im_objects_splitedchannels[2];
       im_objects_greenthr = im_objects_splitedchannels[1];
 
+      createTrackbar("Low H", window_detection_name, &low_H, max_value_H, on_low_H_thresh_trackbar);
+      createTrackbar("High H", window_detection_name, &high_H, max_value_H, on_high_H_thresh_trackbar);
+      createTrackbar("Low S", window_detection_name, &low_S, max_value, on_low_S_thresh_trackbar);
+      createTrackbar("High S", window_detection_name, &high_S, max_value, on_high_S_thresh_trackbar);
+      createTrackbar("Low V", window_detection_name, &low_V, max_value, on_low_V_thresh_trackbar);
+      createTrackbar("High V", window_detection_name, &high_V, max_value, on_high_V_thresh_trackbar);
+
       //////////////////////////////////////////////////
       /////////// Find the object centers  /////////////
       //////////////////////////////////////////////////
@@ -259,6 +355,10 @@ int main(int argc, char** argv)
       imshow( "Red thr", im_bw_objects_fromred);
       imshow( "Green thr", im_bw_objects_fromgreen);
       im_bw_objects = im_bw_objects_fromred & im_bw_objects_fromgreen;
+
+      GaussianBlur( HSV, HSV, Size( 5, 5 ), 1.5, 1.5 );
+      inRange(HSV, Scalar(45, 20, 140), Scalar(95, 255, 255), im_bw_objects);
+
       //imshow( "obj detect", im_bw_objects);
       //threshold(im_objectdetect, im_bw_objects, object_threshold, 255.0, THRESH_BINARY);
       
@@ -267,9 +367,9 @@ int main(int argc, char** argv)
                         Size( 2*erosion_size + 1, 2*erosion_size+1 ),
                         Point( erosion_size, erosion_size ));
       
-      erode( im_bw_objects, im_bw_objects, element );
       dilate( im_bw_objects, im_bw_objects, element );
-      
+      erode( im_bw_objects, im_bw_objects, element );
+
       vector< vector <Point> > contours_objects;
       vector<Point> approx_objects;
       findContours(im_bw_objects, contours_objects, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE); // Find the contours in the image based on threshold
@@ -328,13 +428,14 @@ int main(int argc, char** argv)
         }
 
       threshold(im_holesdetect, im_bw_holes_, holes_threshold, 255.0, THRESH_BINARY);
-      // Opening - erosion followed by dilation for noise (glare) removal
-      /*Mat element = getStructuringElement( MORPH_ELLIPSE, 
+      inRange(HSV, Scalar(20, 0, 120), Scalar(91, 255, 255), im_bw_holes_);
+      // closing operation
+      element = getStructuringElement( MORPH_ELLIPSE, 
                         Size( 2*erosion_size + 1, 2*erosion_size+1 ),
                         Point( erosion_size, erosion_size ));
       
       erode( im_bw_holes_, im_bw_holes_, element );
-      dilate( im_bw_holes_, im_bw_holes_, element );*/
+      dilate( im_bw_holes_, im_bw_holes_, element );
 
       vector< vector <Point> > contours_holes;
       vector<Point> approx_holes;
@@ -452,7 +553,7 @@ int main(int argc, char** argv)
 
       ///////////////// Display images ///////////////////
       imshow("Object detect", im_bw_objects);
-      imshow("Holes detect", im_holesdetect);
+      imshow("Holes detect", im_bw_holes_);
       imshow(original_image_w, im_orig);
       //imshow("Grayscale out of blue c", im_gray);
       namedWindow(adjusted_image, CV_WINDOW_AUTOSIZE);
