@@ -576,10 +576,11 @@ int main(int argc, char** argv)
     move_group.setStartState(start_state);
     //start_state = *move_group.getCurrentState();
     pick = locate_object;
-    pick.position.z = 0.20;
+    pick.position.z = 0.165;
     move_group.setPoseTarget(pick);
     move_group.setPlanningTime(20.0);
-    move_group.setMaxVelocityScalingFactor(0.1);
+    move_group.setMaxVelocityScalingFactor(0.05);
+    //move_group.setMaxAccelerationScalingFactor(0.05);
     success = (move_group.plan(plan_pick) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
     ROS_INFO("Visualizing picking the object %s",success?"":"FAILED");
     visual_tools.deleteAllMarkers();
@@ -588,7 +589,7 @@ int main(int argc, char** argv)
     visual_tools.prompt("execute trajectory and show the plan for another one");
     move_group.move();
 
-    sleep(0.5);
+    sleep(0.25);
 
     srv.request.io_idx = io_idx_close;
 
@@ -619,6 +620,7 @@ int main(int argc, char** argv)
     move_group.setPoseTarget(locate_object);
     move_group.setPlanningTime(20.0);
     move_group.setMaxVelocityScalingFactor(1.0);
+    //move_group.setMaxAccelerationScalingFactor(1.0);
     success = (move_group.plan(plan_locate_object) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
     ROS_INFO("Visualizing picking the object %s",success?"":"FAILED");
     visual_tools.deleteAllMarkers();
@@ -651,12 +653,13 @@ int main(int argc, char** argv)
     move_group.move();
 
     place = locate_hole;
-    place.position.z = 0.20;
+    place.position.z = 0.170;
     start_state = *move_group.getCurrentState();
     move_group.setStartState(start_state);
     move_group.setPoseTarget(place);
     move_group.setPlanningTime(20.0);
-    move_group.setMaxVelocityScalingFactor(0.1);
+    move_group.setMaxVelocityScalingFactor(0.05);
+    //move_group.setMaxAccelerationScalingFactor(0.05);
     success = (move_group.plan(plan_place) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
     ROS_INFO("Visualizing picking the object %s",success?"":"FAILED");
     visual_tools.deleteAllMarkers();
@@ -665,7 +668,7 @@ int main(int argc, char** argv)
     visual_tools.prompt("execute trajectory and show the plan for another one");
     move_group.move();
 
-    sleep(0.5);
+    sleep(0.25);
     srv.request.io_idx = io_idx_open;
 
     /*if (client.call(srv))
@@ -691,6 +694,7 @@ int main(int argc, char** argv)
     move_group.setPoseTarget(locate_hole);
     move_group.setPlanningTime(20.0);
     move_group.setMaxVelocityScalingFactor(1.0);
+    //move_group.setMaxAccelerationScalingFactor(1.0);
     success = (move_group.plan(plan_locate_hole) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
     ROS_INFO("Visualizing going up from locating the hole %s",success?"":"FAILED");
     visual_tools.deleteAllMarkers();

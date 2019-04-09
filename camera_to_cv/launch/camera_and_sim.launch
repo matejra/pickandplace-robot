@@ -1,7 +1,7 @@
 <launch>
   <node name="usb_cam" pkg="usb_cam" type="usb_cam_node" output="screen" >
   </node>
-  <node name="camera_to_cv" pkg="camera_to_cv" type="camera_to_cv_node_old">
+  <node name="camera_to_cv" pkg="camera_to_cv" type="camera_to_cv_node">
   </node>
   <node name="rviz_markers" pkg="rviz_markers" type="basic_shapes" output="screen" >
   </node>

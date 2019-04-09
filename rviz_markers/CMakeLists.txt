@@ -135,16 +135,10 @@ include_directories(
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
 # add_executable(${PROJECT_NAME}_node src/rviz_markers_node.cpp)
-add_executable(frame_tf2_broadcaster src/frame_tf2_broadcaster.cpp)
 add_executable(basic_shapes src/basic_shapes.cpp)
 
-add_dependencies(frame_tf2_broadcaster ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(basic_shapes ${catkin_EXPORTED_TARGETS})
 
-
-target_link_libraries(frame_tf2_broadcaster
- ${catkin_LIBRARIES}
-)
 target_link_libraries(basic_shapes
  ${catkin_LIBRARIES}
 )

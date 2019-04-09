@@ -44,10 +44,6 @@ include_directories(
 )
 
 
-add_executable(move_group_cartesian_path src/move_group_interface_tutorial.cpp)
 add_executable(move_group_pose_path src/pose_constrain_path.cpp)
-add_executable(pick_place src/pick_place.cpp)
-target_link_libraries(move_group_cartesian_path ${catkin_LIBRARIES} ${Boost_LIBRARIES} ${CURL_LIBRARIES})
 target_link_libraries(move_group_pose_path ${catkin_LIBRARIES} ${Boost_LIBRARIES} ${CURL_LIBRARIES})
-target_link_libraries(pick_place ${catkin_LIBRARIES} ${Boost_LIBRARIES} ${CURL_LIBRARIES})
 

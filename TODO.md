@@ -1,7 +1,4 @@
 ### Za naredit:
-##### PRED PREDSTAVITVIJO
-* Moveit! visualiziraj stisnjen objekt v gripperju
-* Moveit! naprogramiraj ovire (ohišje robota)
 ##### OpenCV:
 * Zamenjava Publisher/Subscriber s Client/Server -> camera node steče samo takrat ko ga pokličemo - ne išče stalno lukenj in objektov.
 
@@ -10,8 +7,6 @@
 
 ##### RViz:
 * Optimizacija programa, ki spawna objekte
-
-##### RViz:
 
 ### Narejeno:
 ##### Povezava, driverji:
@@ -51,6 +46,7 @@ rosrun rviz_markers basic_shapes
 ```
 rosrun moveit_fanuc move_group_interface_tutorial
 ```
+* Naprogramirane ovire (ohišje robota)
 
 ##### URDF:
 * Narejen URDF file za Fanuc LR Mate 200 iD 4s
