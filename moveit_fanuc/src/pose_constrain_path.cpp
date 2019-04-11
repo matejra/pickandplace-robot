@@ -426,7 +426,7 @@ int main(int argc, char** argv)
 
   std::vector<moveit_msgs::ObjectColor> collision_colors;
   for (int i = 0; i < collision_objects.size(); i++)
-  {
+  {29
     collision_colors.emplace_back();
     collision_colors.back().color.a= 0.2;
     collision_colors.back().color.r= 0;

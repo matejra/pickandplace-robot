@@ -13,7 +13,8 @@
 #include <camera_to_cv/table_properties.h>
 #include <std_msgs/Bool.h>
 #include <std_msgs/Int32.h>
-
+#include <dynamic_reconfigure/server.h>
+#include <camera_to_cv/DynamicParamsConfig.h>
 using namespace cv;
 using namespace std;
 
@@ -24,17 +25,17 @@ int erosion_size = 1;
 double min_contour_area = 220;
 double max_contour_area = 400;
 float center_proximity = 7.0;
-double holes_threshold = 250;
+int holes_threshold = 150;
 double object_threshold = 160;
-int threshold_invredobjects = 175;
-int threshold_greenobjects = 170;
+int threshold_invgreenobjects = 3;
+int threshold_redobjects = 170;
 int max_rectangle_index = 0;
 bool working_table_limits_found = 0;
 int n_maxexp_objects = 1000;
 static const string OPENCV_WINDOW = "Color image";
 Rect working_table, bounding_patch;
 Mat im_working_table_gray, image, im_orig, im_adjust, im_holesdetect, im_objectdetect, im_gray, im_bw_canny, im_gray_edges, im_bw_holes_, im_holes_splitedchannels[3];
-Mat im_objects_redthr, im_objects_greenthr, im_objects_allchanels, im_objects_splitedchannels[3], im_bw_objects_fromred, im_bw_objects_fromgreen, im_bw_holes_fromred;
+Mat im_objects_redthr, im_objects_greenthr, im_objects_allchanels, im_objects_splitedchannels[3], im_bw_objects_fromred, im_bw_objects_fromgreen, im_bw_holes_fromred, im_objects_bluethr;
 Mat channel[3];
 Mat HSV, frame_threshold;
 
@@ -52,15 +53,30 @@ const String window_detection_name = "Object Detection_HSV";
 
 // Final values of contrast, brightness and gamma for object/hole detection
 double gamma_hole = 0;
-int brightness_hole = -450;
+int brightness_hole = 450;
 int contrast_hole = 5;
 double gamma_object = 0;
-int brightness_object = -2065;
-int contrast_object = 12;
-const int max_value_H = 360/2;
+int brightness_object = 1228;
+int contrast_object = 8;
+const int max_value_H = 179;
 const int max_value = 255;
 int low_H = 0, low_S = 0, low_V = 0;
 int high_H = max_value_H, high_S = max_value, high_V = max_value;
+
+// Callback function for parameters contrast, brightness, gamma change : for dynamic reconfigure
+void callback_dynamicreconf(camera_to_cv::DynamicParamsConfig &config, uint32_t level) {
+  brightness_object = config.bright_obj*10;
+  contrast_object = config.contr_obj;
+  gamma_object = config.gamma_obj*10;
+  object_threshold = config.thr_obj;
+  low_H = config.Hmin;
+  high_H = config.Hmax;
+  low_S = config.Smin;
+  high_S = config.Smax;
+  low_V = config.Vmin;
+  high_V = config.Vmax;
+  holes_threshold = config.thr_hole;
+}
 
 // Callback function for parameters contrast, brightness, gamma change
 void ParametersChange(int, void*) 
@@ -150,6 +166,9 @@ int main(int argc, char** argv)
   ros::Publisher holes_pub = nh_.advertise<camera_to_cv::points_array>("holes_chatter", 1000);
   ros::Publisher table_properties_pub = nh_.advertise<camera_to_cv::table_properties>("table_properties_chatter", 1000);
   ros::Publisher table_found_pub = nh_.advertise<std_msgs::Bool>("table_found", 1000);
+  dynamic_reconfigure::Server<camera_to_cv::DynamicParamsConfig> server_dynrec;
+  dynamic_reconfigure::Server<camera_to_cv::DynamicParamsConfig>::CallbackType f;
+
   ros::Rate loop_rate(30);
 
 
@@ -169,6 +188,9 @@ int main(int argc, char** argv)
       im_gray = channel[0]; // Gray image out of blue channel (to improve contrast)
       GaussianBlur( im_bw_canny, im_bw_canny, Size( 3, 3 ), 1.5, 1.5 );
       imshow("canny table detection", im_bw_canny);
+
+      f = boost::bind(&callback_dynamicreconf, _1, _2);
+      server_dynrec.setCallback(f);
       
       //////////////////////////////////////////////////
       ///////// Getting working table limits ///////////
@@ -318,7 +340,7 @@ int main(int argc, char** argv)
       for( int y = 0; y < im_gray_.rows; y++ ) {
             for( int x = 0; x < im_gray_.cols; x++ ) {
               im_objectdetect.at<unsigned char>(y,x) = 
-                saturate_cast<uchar>(pow(im_gray_.at<unsigned char>(y,x) / 255.0, gamma_object) * 255.0 + contrast_object*im_gray_.at<unsigned char>(y,x) + brightness_object );
+                saturate_cast<uchar>(pow(im_gray_.at<unsigned char>(y,x) / 255.0, gamma_object) * 255.0 + contrast_object*im_gray_.at<unsigned char>(y,x) - brightness_object );
             }
         }*/
       im_objects_allchanels = Mat::zeros( image.size(), image.type() );
@@ -327,14 +349,15 @@ int main(int argc, char** argv)
             for( int x = 0; x < image.cols; x++ ) {
                 for( int c = 0; c < image.channels(); c++ ) {
                     im_objects_allchanels.at<Vec3b>(y,x)[c] =
-                      saturate_cast<uchar>( pow(image.at<Vec3b>(y,x)[c] / 255.0, gamma_object) * 255.0 + contrast_object*image.at<Vec3b>(y,x)[c] + brightness_object );
+                      saturate_cast<uchar>( pow(image.at<Vec3b>(y,x)[c] / 255.0, gamma_object) * 255.0 + contrast_object*image.at<Vec3b>(y,x)[c] - brightness_object );
                 }
             }
         }
       split(im_objects_allchanels, im_objects_splitedchannels);
       imshow("ObjdetectC/B", im_objects_allchanels);
-      im_objects_redthr = im_objects_splitedchannels[0];
+      im_objects_redthr = im_objects_splitedchannels[2];
       im_objects_greenthr = im_objects_splitedchannels[1];
+      im_objects_bluethr = im_objects_splitedchannels[0];
 
       createTrackbar("Low H", window_detection_name, &low_H, max_value_H, on_low_H_thresh_trackbar);
       createTrackbar("High H", window_detection_name, &high_H, max_value_H, on_high_H_thresh_trackbar);
@@ -350,18 +373,19 @@ int main(int argc, char** argv)
       // based on 1. thresholding of image (the "whitest" objects) and 2. Circle shape    
       GaussianBlur( im_objects_redthr, im_objects_redthr, Size( ksize, ksize ), sigma, sigma );
       GaussianBlur( im_objects_greenthr, im_objects_greenthr, Size( ksize, ksize ), sigma, sigma );
-      /*threshold(im_objects_redthr, im_bw_objects_fromred, threshold_invredobjects, 255.0, THRESH_BINARY_INV);
-      threshold(im_objects_greenthr, im_bw_objects_fromgreen, threshold_greenobjects, 255.0, THRESH_BINARY);
+      //imshow("red chanel", im_objects_redthr);
+      threshold(im_objects_greenthr, im_bw_objects_fromgreen, threshold_invgreenobjects, 255.0, THRESH_BINARY_INV);
+      threshold(im_objects_redthr, im_bw_objects_fromred, 50, 255.0, THRESH_BINARY);
       imshow( "Red thr", im_bw_objects_fromred);
       imshow( "Green thr", im_bw_objects_fromgreen);
-      im_bw_objects = im_bw_objects_fromred & im_bw_objects_fromgreen;*/
+      im_bw_objects = im_bw_objects_fromred & im_bw_objects_fromgreen;
 
 
       /*imshow("red channel before threshold", im_objects_redthr);
       threshold(im_objects_redthr, im_bw_objects, 70, 255.0, THRESH_BINARY);
       imshow( "obj detect", im_bw_objects);*/
-      cvtColor(im_objects_allchanels, im_bw_objects, COLOR_BGR2GRAY);
-      threshold(im_bw_objects, im_bw_objects, 170, 255.0, THRESH_BINARY);
+      //cvtColor(im_objects_allchanels, im_bw_objects, COLOR_BGR2GRAY);
+      //threshold(im_objects_bluethr, im_bw_objects, object_threshold, 255.0, THRESH_BINARY);
 
       //threshold(im_objectdetect, im_bw_objects, object_threshold, 255.0, THRESH_BINARY);
       
@@ -430,7 +454,7 @@ int main(int argc, char** argv)
             for( int x = 0; x < image.cols; x++ ) {
                 for( int c = 0; c < image.channels(); c++ ) {
                     im_holesdetect.at<Vec3b>(y,x)[c] =
-                      saturate_cast<uchar>( pow(image.at<Vec3b>(y,x)[c] / 255.0, gamma_hole) * 255.0 + contrast_hole*image.at<Vec3b>(y,x)[c] + brightness_hole );
+                      saturate_cast<uchar>( pow(image.at<Vec3b>(y,x)[c] / 255.0, gamma_hole) * 255.0 + contrast_hole*image.at<Vec3b>(y,x)[c] - brightness_hole );
                 }
             }
         }
@@ -440,7 +464,9 @@ int main(int argc, char** argv)
       imshow("Imred", im_bw_holes_fromred);
       threshold(im_bw_holes_fromred, im_bw_holes_, 170, 255.0, THRESH_BINARY);*/
       //GaussianBlur( HSV, HSV, Size( 5, 5 ), 1.5, 1.5 );
-      inRange(HSV, Scalar(0, 0, 79), Scalar(112, 67, 248), im_bw_holes_);
+      //inRange(HSV, Scalar(0, 0, 79), Scalar(112, 67, 248), im_bw_holes_);
+      inRange(HSV, Scalar(low_H, low_S, low_V), Scalar(high_H, high_S, high_V), im_bw_holes_);
+      
       // closing operation
       element = getStructuringElement( MORPH_RECT, 
                         Size( 2*erosion_size + 1, 2*erosion_size+1 ),
